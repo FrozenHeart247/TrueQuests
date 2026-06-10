@@ -73,6 +73,8 @@ TQ.registerFaction({
     id = "medics",
     name = "Field Medics",
     icon = "media/textures/TrueQuests/Factions/medics.png",
+    fullImage = "media/textures/TrueQuests/Factions/medicsFull.png",
+    unknownImage = "media/textures/TrueQuests/Factions/Unknown.png",
     maxActiveMembers = 2,
     rewardTables = {
         easy = "tq_medics_easy",
@@ -90,6 +92,8 @@ TQ.registerFaction({
     id = "independent",
     name = "Unaffiliated Survivors",
     icon = "media/textures/TrueQuests/Factions/independent.png",
+    fullImage = "media/textures/TrueQuests/Factions/independentFull.png",
+    unknownImage = "media/textures/TrueQuests/Factions/Unknown.png",
     maxActiveMembers = 2,
     rewardTables = {
         easy = "tq_independent_easy",
@@ -139,14 +143,14 @@ TQ.registerRewardTable("tq_independent_easy", {
 })
 
 TQ.registerContact({
-    id = "dr_ella_cross",
-    name = "Dr. Ella Cross",
+    id = "dr_amelie_crowe",
+    name = "Amelie Crowe",
     role = "leader",
     factionId = "medics",
     contactType = "radio",
     frequency = 92100,
-    icon = "media/textures/TrueQuests/NPC/dr_ella_cross_icon.png",
-    portrait = "media/textures/TrueQuests/NPC/dr_ella_cross.png",
+    icon = "media/textures/TrueQuests/NPC/dr_amelie_crowe_icon.png",
+    portrait = "media/textures/TrueQuests/NPC/dr_amelie_crowe.png",
     turnIn = FIELD_CLINIC,
     rewardTables = {
         easy = "tq_medics_doctor_easy",
@@ -251,7 +255,7 @@ TQ.registerQuestTemplate({
     title = "Clean Bandages",
     description = "Dr. Cross is running through clean dressings faster than the clinic can wash them. Bring bandages to the field clinic drop.",
     difficulty = "easy",
-    contact = "dr_ella_cross",
+    contact = "dr_amelie_crowe",
     factionId = "medics",
     unique = true,
     tags = { "medical", "delivery" },

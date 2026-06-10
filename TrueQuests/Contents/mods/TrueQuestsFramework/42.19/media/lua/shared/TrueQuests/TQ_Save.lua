@@ -14,6 +14,7 @@ function TQ.Save.createDefaultData()
         failed = {},
         contacts = {
             active = nil,
+            discoveredFactions = {},
         },
         reputation = {
             factions = {},
@@ -34,6 +35,7 @@ function TQ.Save.migrate(data)
     data.completed = type(data.completed) == "table" and data.completed or {}
     data.failed = type(data.failed) == "table" and data.failed or {}
     data.contacts = type(data.contacts) == "table" and data.contacts or {}
+    data.contacts.discoveredFactions = type(data.contacts.discoveredFactions) == "table" and data.contacts.discoveredFactions or {}
     data.reputation = type(data.reputation) == "table" and data.reputation or {}
     data.reputation.factions = type(data.reputation.factions) == "table" and data.reputation.factions or {}
     data.reputation.contacts = type(data.reputation.contacts) == "table" and data.reputation.contacts or {}

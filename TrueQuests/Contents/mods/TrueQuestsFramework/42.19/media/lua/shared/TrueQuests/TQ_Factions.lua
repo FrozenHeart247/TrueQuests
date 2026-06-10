@@ -304,6 +304,33 @@ function TQ.Factions.isContactActive(player, contactId)
     return map[tostring(contactId)] == true
 end
 
+function TQ.Factions.isFactionDiscovered(player, factionId)
+    local data = TQ.Save.getData(player)
+    data.contacts = type(data.contacts) == "table" and data.contacts or {}
+    data.contacts.discoveredFactions = type(data.contacts.discoveredFactions) == "table" and data.contacts.discoveredFactions or {}
+    return data.contacts.discoveredFactions[tostring(factionId or DEFAULT_FACTION_ID)] == true
+end
+
+function TQ.Factions.discoverFaction(player, factionId)
+    local data = TQ.Save.getData(player)
+    data.contacts = type(data.contacts) == "table" and data.contacts or {}
+    data.contacts.discoveredFactions = type(data.contacts.discoveredFactions) == "table" and data.contacts.discoveredFactions or {}
+
+    factionId = tostring(factionId or DEFAULT_FACTION_ID)
+    if data.contacts.discoveredFactions[factionId] == true then
+        return false
+    end
+
+    data.contacts.discoveredFactions[factionId] = true
+    table.insert(data.history, {
+        event = "faction_discovered",
+        factionId = factionId,
+        at = TQ.getWorldAgeHours(),
+    })
+    TQ.Save.touch(player)
+    return true
+end
+
 local function ensureReputation(data)
     data.reputation = type(data.reputation) == "table" and data.reputation or {}
     data.reputation.factions = type(data.reputation.factions) == "table" and data.reputation.factions or {}

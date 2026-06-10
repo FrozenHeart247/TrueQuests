@@ -3,46 +3,89 @@ require "ISUI/ISButton"
 require "ISUI/ISScrollingListBox"
 require "TrueQuests/TQ_API"
 require "TrueQuests/UI/TQ_UITheme"
-require "TrueQuests/UI/TQ_DialogueWindow"
 require "TrueQuests/UI/TQ_RewardChoiceWindow"
 
 TQ_QuestBoardWindow = ISPanel:derive("TQ_QuestBoardWindow")
 TQ_QuestBoardWindow.instance = nil
 
+local UNKNOWN_FACTION_IMAGE = "media/textures/TrueQuests/Factions/Unknown.png"
+
+local function setVisible(element, visible)
+    if not element then
+        return
+    end
+
+    if element.setVisible then
+        element:setVisible(visible)
+    else
+        element.visible = visible
+    end
+
+    if element.setEnable then
+        element:setEnable(visible == true)
+    end
+end
+
+local function setButtonTitle(button, title)
+    if not button then
+        return
+    end
+
+    if button.setTitle then
+        button:setTitle(title)
+    else
+        button.title = title
+    end
+end
+
+local function setChildBounds(child, x, y, width, height)
+    if not child then
+        return
+    end
+
+    child.x = x
+    child.y = y
+    child.width = width
+    child.height = height
+
+    if child.setX then child:setX(x) end
+    if child.setY then child:setY(y) end
+    if child.setWidth then child:setWidth(width) end
+    if child.setHeight then child:setHeight(height) end
+end
+
+local function clamp(value, minValue, maxValue)
+    value = tonumber(value) or minValue
+    if value < minValue then return minValue end
+    if value > maxValue then return maxValue end
+    return value
+end
+
 local function statusLabel(status)
-    if status == "readyToTurnIn" then
-        return "Ready"
-    end
-    if status == "rewardPending" then
-        return "Reward"
-    end
-    if status == "accepted" then
-        return "Active"
-    end
+    if status == "readyToTurnIn" then return "Ready" end
+    if status == "rewardPending" then return "Reward" end
+    if status == "accepted" then return "Active" end
     return tostring(status or "")
 end
 
 local function statusColor(status)
-    if status == "readyToTurnIn" then
-        return "green"
-    end
-    if status == "rewardPending" then
-        return "amber"
-    end
+    if status == "readyToTurnIn" then return "green" end
+    if status == "rewardPending" then return "amber" end
     return "blue"
 end
 
 local function difficultyColor(difficulty)
     difficulty = string.lower(tostring(difficulty or ""))
-    if difficulty == "hard" or difficulty == "deadly" then
-        return "red"
-    end
-    if difficulty == "medium" or difficulty == "normal" then
-        return "amber"
-    end
-    if difficulty == "easy" then
-        return "green"
-    end
+    if difficulty == "hard" or difficulty == "deadly" then return "red" end
+    if difficulty == "medium" or difficulty == "normal" then return "amber" end
+    if difficulty == "easy" then return "green" end
+    return "blue"
+end
+
+local function factionAccent(factionId)
+    factionId = tostring(factionId or "")
+    if factionId == "medics" then return "green" end
+    if factionId == "independent" then return "amber" end
     return "blue"
 end
 
@@ -56,7 +99,15 @@ local function reasonText(reason, quest)
     if reason == "consume_failed" then
         return "Required items are missing."
     end
+    if reason == "contact_inactive" then
+        return "That contact is not answering right now."
+    end
     return "Cannot turn this in yet."
+end
+
+local function factionName(factionId)
+    local faction = TrueQuests.getFaction and TrueQuests.getFaction(factionId)
+    return tostring((faction and faction.name) or factionId or "Unknown")
 end
 
 local function contactName(contactId)
@@ -64,9 +115,12 @@ local function contactName(contactId)
     return tostring((contact and contact.name) or contactId or "Unknown")
 end
 
-local function factionName(factionId)
-    local faction = TrueQuests.getFaction and TrueQuests.getFaction(factionId)
-    return tostring((faction and faction.name) or factionId or "Unaffiliated")
+local function contactFactionId(contact)
+    if TrueQuests.Factions and TrueQuests.Factions.getFactionIdForContact then
+        return TrueQuests.Factions.getFactionIdForContact(contact)
+    end
+
+    return tostring(contact and (contact.factionId or contact.faction) or "independent")
 end
 
 local function reputationText(player, factionId)
@@ -77,20 +131,37 @@ local function reputationText(player, factionId)
     return "Rep: " .. tostring(TrueQuests.Factions.getReputation(player, factionId or "independent"))
 end
 
-local function entryKey(entry)
-    if not entry then
+local function getTextureSafe(path)
+    if not path or not getTexture then
         return nil
     end
 
-    if entry.kind == "active" and entry.quest then
-        return "active:" .. tostring(entry.quest.id)
-    end
+    local ok, texture = pcall(function()
+        return getTexture(tostring(path))
+    end)
 
-    if entry.kind == "offer" and entry.offer then
-        return "offer:" .. tostring(entry.offer.templateId)
+    if ok then
+        return texture
     end
-
     return nil
+end
+
+local function drawTextureFit(panel, texture, x, y, width, height, alpha)
+    if not texture then
+        return false
+    end
+
+    local tw = texture:getWidth()
+    local th = texture:getHeight()
+    if not tw or not th or tw <= 0 or th <= 0 then
+        return false
+    end
+
+    local scale = math.min(width / tw, height / th)
+    local drawW = tw * scale
+    local drawH = th * scale
+    panel:drawTextureScaled(texture, x + (width - drawW) / 2, y + (height - drawH) / 2, drawW, drawH, alpha or 1, 1, 1, 1)
+    return true
 end
 
 local function makeButton(parent, x, y, width, height, title, callback, kind)
@@ -101,71 +172,300 @@ local function makeButton(parent, x, y, width, height, title, callback, kind)
     return button
 end
 
+local function tableCount(list)
+    return type(list) == "table" and #list or 0
+end
+
+local function getActiveContactsForFaction(player, factionId, forceIfEmpty)
+    if not TrueQuests.Factions or not TrueQuests.Factions.getActiveContacts then
+        return {}
+    end
+
+    local contacts = TrueQuests.Factions.getActiveContacts(player, factionId) or {}
+    if forceIfEmpty and #contacts == 0 and TrueQuests.Factions.ensureActiveContacts then
+        TrueQuests.Factions.ensureActiveContacts(player, true)
+        contacts = TrueQuests.Factions.getActiveContacts(player, factionId) or {}
+    end
+
+    return contacts
+end
+
+local function ensureFactionSummary(summaries, factionId)
+    factionId = tostring(factionId or "independent")
+    local summary = summaries[factionId]
+    if summary then
+        return summary
+    end
+
+    local faction = TrueQuests.getFaction and TrueQuests.getFaction(factionId) or nil
+    summary = {
+        factionId = factionId,
+        faction = faction,
+        name = tostring((faction and faction.name) or factionId),
+        activeContacts = 0,
+        activeQuests = 0,
+        offers = 0,
+    }
+    summaries[factionId] = summary
+    return summary
+end
+
+local function entryKey(entry)
+    if not entry then return nil end
+    if entry.kind == "active" and entry.quest then return "active:" .. tostring(entry.quest.id) end
+    if entry.kind == "offer" and entry.offer then return "offer:" .. tostring(entry.offer.templateId) end
+    return nil
+end
+
 function TQ_QuestBoardWindow:initialise()
     ISPanel.initialise(self)
 end
 
 function TQ_QuestBoardWindow:createChildren()
     ISPanel.createChildren(self)
+    self:applyLayout()
 
-    self.contentX = 12
-    self.contentY = 34
-    self.headerH = 56
-    self.listX = 12
-    self.listY = 100
-    self.listW = 278
-    self.panelBottom = self.height - 54
-    self.listH = self.panelBottom - self.listY
-    self.detailX = self.listX + self.listW + 12
-    self.detailY = self.listY
-    self.detailW = self.width - self.detailX - 12
-    self.detailH = self.listH
-
-    self.filterAllButton = makeButton(self, self.listX + 8, self.listY + 8, 74, 22, "All", TQ_QuestBoardWindow.onFilterAll, "info")
-    self.filterActiveButton = makeButton(self, self.listX + 88, self.listY + 8, 82, 22, "Active", TQ_QuestBoardWindow.onFilterActive, "muted")
-    self.filterOfferButton = makeButton(self, self.listX + 176, self.listY + 8, 94, 22, "Available", TQ_QuestBoardWindow.onFilterOffers, "muted")
-
-    self.questList = ISScrollingListBox:new(self.listX + 7, self.listY + 38, self.listW - 14, self.listH - 45)
+    self.questList = ISScrollingListBox:new(self.jobsX, self.jobsY, self.jobsW, self.jobsH)
     self.questList:initialise()
     self.questList:instantiate()
-    self.questList.itemheight = 54
-    self.questList.doDrawItem = TQ_QuestBoardWindow.drawListItem
+    self.questList.itemheight = 58
+    self.questList.doDrawItem = TQ_QuestBoardWindow.drawJobItem
     self.questList.drawBorder = false
     self:addChild(self.questList)
 
-    local buttonY = self.height - 40
-    self.acceptButton = makeButton(self, 12, buttonY, 92, 26, "Accept", TQ_QuestBoardWindow.onAccept, "primary")
-    self.turnInButton = makeButton(self, 112, buttonY, 102, 26, "Turn In", TQ_QuestBoardWindow.onTurnIn, "warning")
-    self.refreshButton = makeButton(self, 222, buttonY, 92, 26, "Refresh", TQ_QuestBoardWindow.refreshData, "default")
-    self.talkButton = makeButton(self, 322, buttonY, 82, 26, "Talk", TQ_QuestBoardWindow.onTalk, "info")
-    self.closeButton = makeButton(self, self.width - 104, buttonY, 92, 26, "Close", TQ_QuestBoardWindow.close, "muted")
+    self.backButton = makeButton(self, 16, self.height - 40, 88, 26, "Back", TQ_QuestBoardWindow.onBack, "muted")
+    self.refreshButton = makeButton(self, 112, self.height - 40, 92, 26, "Refresh", TQ_QuestBoardWindow.refreshData, "default")
+    self.acceptButton = makeButton(self, 214, self.height - 40, 92, 26, "Accept", TQ_QuestBoardWindow.onAccept, "primary")
+    self.turnInButton = makeButton(self, 314, self.height - 40, 102, 26, "Turn In", TQ_QuestBoardWindow.onTurnIn, "warning")
+    self.closeButton = makeButton(self, self.width - 108, self.height - 40, 92, 26, "Close", TQ_QuestBoardWindow.close, "muted")
     self.topCloseButton = makeButton(self, self.width - 27, 3, 21, 18, "X", TQ_QuestBoardWindow.close, "danger")
 
+    self.workButton = makeButton(self, self.optionsX, self.optionsY, 120, 26, "Jobs", TQ_QuestBoardWindow.onDialogueJobs, "info")
+    self.aboutButton = makeButton(self, self.optionsX + 130, self.optionsY, 120, 26, "About", TQ_QuestBoardWindow.onDialogueAbout, "default")
+    self.rumorButton = makeButton(self, self.optionsX + 260, self.optionsY, 120, 26, "Rumor", TQ_QuestBoardWindow.onDialogueRumor, "muted")
+
+    self:applyLayout()
     self:refreshData()
 end
 
-function TQ_QuestBoardWindow:onFilterAll()
-    self.filter = "all"
-    self:refreshData()
+function TQ_QuestBoardWindow:applyLayout()
+    self.minimumWidth = self.minimumWidth or 820
+    self.minimumHeight = self.minimumHeight or 560
+    self.width = math.max(self.minimumWidth, self.width)
+    self.height = math.max(self.minimumHeight, self.height)
+
+    self.bodyX = 16
+    self.bodyY = 34
+    self.bodyW = self.width - 32
+    self.bodyH = self.height - 88
+    self.headerH = 74
+    self.contentX = self.bodyX
+    self.contentY = self.bodyY + self.headerH + 12
+    self.contentW = self.bodyW
+    self.contentH = self.bodyH - self.headerH - 12
+
+    self.dialoguePortraitW = clamp(math.floor(self.contentW * 0.30), 220, 280)
+    self.dialogueX = self.contentX + self.dialoguePortraitW + 14
+    self.dialogueY = self.contentY
+    self.dialogueW = self.contentX + self.contentW - self.dialogueX
+    self.dialogueH = self.contentH
+
+    self.optionsX = self.dialogueX + 12
+    self.optionsY = self.dialogueY + 132
+    self.jobsX = self.dialogueX + 12
+    self.jobsY = self.optionsY + 40
+    self.jobsW = self.dialogueW - 24
+    self.jobsH = self.dialogueH - 184
+
+    setChildBounds(self.questList, self.jobsX, self.jobsY, self.jobsW, self.jobsH)
+    setChildBounds(self.backButton, 16, self.height - 40, 88, 26)
+    setChildBounds(self.refreshButton, 112, self.height - 40, 92, 26)
+    setChildBounds(self.acceptButton, 214, self.height - 40, 92, 26)
+    setChildBounds(self.turnInButton, 314, self.height - 40, 102, 26)
+    setChildBounds(self.closeButton, self.width - 108, self.height - 40, 92, 26)
+    setChildBounds(self.topCloseButton, self.width - 27, 3, 21, 18)
+    setChildBounds(self.workButton, self.optionsX, self.optionsY, 120, 26)
+    setChildBounds(self.aboutButton, self.optionsX + 130, self.optionsY, 120, 26)
+    setChildBounds(self.rumorButton, self.optionsX + 260, self.optionsY, 120, 26)
 end
 
-function TQ_QuestBoardWindow:onFilterActive()
-    self.filter = "active"
-    self:refreshData()
+function TQ_QuestBoardWindow:refreshData()
+    local selectedKey = entryKey(self:getSelectedJobEntry())
+    TrueQuests.QuestManager.updateAll(self.player)
+
+    self.factionCards = {}
+    self.contactCards = {}
+    self.cardHitboxes = {}
+    self.activeCount = 0
+    self.offerCount = 0
+    self.activeContactCount = 0
+
+    self.activeContacts = TrueQuests.Factions and TrueQuests.Factions.getActiveContacts(self.player) or TrueQuests.getContacts()
+    self.activeQuests = TrueQuests.QuestManager.getActiveQuests(self.player) or {}
+    self.offers = TrueQuests.QuestManager.getOffers(self.player, nil, nil) or {}
+
+    if self.mode == "factions" then
+        self:buildFactionCards()
+    elseif self.mode == "contacts" then
+        self:buildContactCards()
+    elseif self.mode == "dialogue" then
+        self:refreshJobList(selectedKey)
+    end
+
+    self:updateControls()
 end
 
-function TQ_QuestBoardWindow:onFilterOffers()
-    self.filter = "offer"
-    self:refreshData()
+function TQ_QuestBoardWindow:buildFactionCards()
+    local summaries = {}
+
+    for _, faction in ipairs(TrueQuests.getFactions and TrueQuests.getFactions() or {}) do
+        ensureFactionSummary(summaries, faction.id)
+    end
+
+    for _, contact in ipairs(self.activeContacts or {}) do
+        local summary = ensureFactionSummary(summaries, contactFactionId(contact))
+        summary.activeContacts = summary.activeContacts + 1
+        self.activeContactCount = self.activeContactCount + 1
+    end
+
+    for _, quest in ipairs(self.activeQuests or {}) do
+        local summary = ensureFactionSummary(summaries, quest.factionId or contactFactionId(TrueQuests.getContact(quest.contactId)))
+        summary.activeQuests = summary.activeQuests + 1
+        self.activeCount = self.activeCount + 1
+    end
+
+    for _, offer in ipairs(self.offers or {}) do
+        local summary = ensureFactionSummary(summaries, offer.factionId or contactFactionId(TrueQuests.getContact(offer.contactId)))
+        summary.offers = summary.offers + 1
+        self.offerCount = self.offerCount + 1
+    end
+
+    for _, summary in pairs(summaries) do
+        if summary.activeContacts > 0 or summary.activeQuests > 0 or summary.offers > 0 then
+            table.insert(self.factionCards, summary)
+        end
+    end
+
+    table.sort(self.factionCards, function(a, b)
+        return tostring(a.name) < tostring(b.name)
+    end)
 end
 
-function TQ_QuestBoardWindow:updateFilterButtons()
-    TQ_UITheme.styleButton(self.filterAllButton, self.filter == "all" and "info" or "muted")
-    TQ_UITheme.styleButton(self.filterActiveButton, self.filter == "active" and "info" or "muted")
-    TQ_UITheme.styleButton(self.filterOfferButton, self.filter == "offer" and "info" or "muted")
+function TQ_QuestBoardWindow:buildContactCards()
+    self.contactCards = {}
+    local contacts = getActiveContactsForFaction(self.player, self.selectedFactionId, true)
+    for _, contact in ipairs(contacts or {}) do
+        table.insert(self.contactCards, contact)
+        self.activeContactCount = self.activeContactCount + 1
+    end
+
+    table.sort(self.contactCards, function(a, b)
+        local ar = tostring(a.role or "")
+        local br = tostring(b.role or "")
+        if ar ~= br then
+            return ar < br
+        end
+        return tostring(a.name or a.id) < tostring(b.name or b.id)
+    end)
+
+    for _, quest in ipairs(self.activeQuests or {}) do
+        if tostring(quest.factionId or "") == tostring(self.selectedFactionId) then
+            self.activeCount = self.activeCount + 1
+        end
+    end
+
+    for _, offer in ipairs(self.offers or {}) do
+        if tostring(offer.factionId or "") == tostring(self.selectedFactionId) then
+            self.offerCount = self.offerCount + 1
+        end
+    end
 end
 
-function TQ_QuestBoardWindow.drawListItem(list, y, item, alt)
+function TQ_QuestBoardWindow:refreshJobList(selectedKey)
+    self.questList:clear()
+    self.entries = {}
+
+    if not self.jobsRevealed or not self.selectedContactId then
+        return
+    end
+
+    for _, quest in ipairs(self.activeQuests or {}) do
+        if tostring(quest.contactId or "") == tostring(self.selectedContactId) then
+            self.activeCount = self.activeCount + 1
+            local entry = {
+                kind = "active",
+                quest = quest,
+                contactId = quest.contactId,
+                factionId = quest.factionId or self.selectedFactionId,
+                badge = statusLabel(quest.status),
+                accent = statusColor(quest.status),
+                meta = TrueQuests.turnInToText(quest.turnIn),
+            }
+            table.insert(self.entries, entry)
+            self.questList:addItem(tostring(quest.title), entry)
+        end
+    end
+
+    local contactOffers = TrueQuests.QuestManager.getOffers(self.player, self.selectedContactId, nil) or {}
+    for _, offer in ipairs(contactOffers) do
+        self.offerCount = self.offerCount + 1
+        local entry = {
+            kind = "offer",
+            offer = offer,
+            contactId = offer.contactId,
+            factionId = offer.factionId or self.selectedFactionId,
+            badge = tostring(offer.difficulty),
+            accent = difficultyColor(offer.difficulty),
+            meta = "new request",
+        }
+        table.insert(self.entries, entry)
+        self.questList:addItem(tostring(offer.title), entry)
+    end
+
+    local fallbackSelected = 1
+    for index, row in ipairs(self.questList.items or {}) do
+        if entryKey(row.item) == selectedKey then
+            fallbackSelected = index
+            break
+        end
+    end
+
+    if self.questList.items and #self.questList.items > 0 then
+        self.questList.selected = fallbackSelected
+    end
+end
+
+function TQ_QuestBoardWindow:updateControls()
+    self:applyLayout()
+
+    local inDialogue = self.mode == "dialogue"
+    local showJobs = inDialogue and self.jobsRevealed == true
+    local selected = self:getSelectedJobEntry()
+
+    setVisible(self.questList, showJobs)
+    setVisible(self.workButton, inDialogue)
+    setVisible(self.aboutButton, inDialogue)
+    setVisible(self.rumorButton, inDialogue)
+    setVisible(self.acceptButton, showJobs)
+    setVisible(self.turnInButton, showJobs)
+
+    self.backButton:setEnable(self.mode ~= "factions")
+    self.refreshButton:setEnable(true)
+    self.closeButton:setEnable(true)
+
+    local canAccept = showJobs and selected and selected.kind == "offer"
+    local canTurnIn = showJobs and selected and selected.kind == "active"
+    self.acceptButton:setEnable(canAccept == true)
+    self.turnInButton:setEnable(canTurnIn == true)
+
+    if selected and selected.kind == "active" and selected.quest and selected.quest.status == "rewardPending" then
+        setButtonTitle(self.turnInButton, "Rewards")
+    else
+        setButtonTitle(self.turnInButton, "Turn In")
+    end
+end
+
+function TQ_QuestBoardWindow.drawJobItem(list, y, item, alt)
     local entry = item.item
     local selected = list.selected == item.index
     local rowX = 3
@@ -179,22 +479,19 @@ function TQ_QuestBoardWindow.drawListItem(list, y, item, alt)
     TQ_UITheme.drawAccent(list, rowX, rowY, 4, rowH, accent)
 
     local badge = tostring((entry and entry.badge) or "")
-    local badgeW = math.max(48, TQ_UITheme.measure(UIFont.Small, badge) + 14)
+    local badgeW = math.max(52, TQ_UITheme.measure(UIFont.Small, badge) + 14)
     local titleW = rowW - badgeW - 24
-    local title = TQ_UITheme.truncate(item.text, titleW, UIFont.Small)
-    local meta = TQ_UITheme.truncate((entry and entry.meta) or "", rowW - 24, UIFont.Small)
-
-    list:drawText(title, rowX + 12, rowY + 8, 0.92, 0.91, 0.86, 1, UIFont.Small)
-    list:drawText(meta, rowX + 12, rowY + 29, 0.58, 0.63, 0.65, 1, UIFont.Small)
+    list:drawText(TQ_UITheme.truncate(item.text, titleW, UIFont.Small), rowX + 12, rowY + 8, 0.92, 0.91, 0.86, 1, UIFont.Small)
+    list:drawText(TQ_UITheme.truncate((entry and entry.meta) or "", rowW - 24, UIFont.Small), rowX + 12, rowY + 31, 0.58, 0.63, 0.65, 1, UIFont.Small)
 
     if badge ~= "" then
-        TQ_UITheme.drawPill(list, rowX + rowW - badgeW - 7, rowY + 7, badgeW, 20, badge, accent)
+        TQ_UITheme.drawPill(list, rowX + rowW - badgeW - 7, rowY + 8, badgeW, 20, badge, accent)
     end
 
     return y + list.itemheight
 end
 
-function TQ_QuestBoardWindow:getSelectedEntry()
+function TQ_QuestBoardWindow:getSelectedJobEntry()
     if not self.questList or not self.questList.items then
         return nil
     end
@@ -204,138 +501,73 @@ function TQ_QuestBoardWindow:getSelectedEntry()
 end
 
 function TQ_QuestBoardWindow:getSelectedContact()
-    local entry = self:getSelectedEntry()
-    if not entry then
-        return nil
-    end
-
-    local contactId = entry.contactId
-    if not contactId and entry.quest then
-        contactId = entry.quest.contactId
-    elseif not contactId and entry.offer then
-        contactId = entry.offer.contactId
-    end
-
-    return contactId and TrueQuests.getContact(contactId) or nil
+    return self.selectedContactId and TrueQuests.getContact(self.selectedContactId) or nil
 end
 
-function TQ_QuestBoardWindow:addEntry(title, entry)
-    table.insert(self.entries, entry)
-    self.questList:addItem(title, entry)
+function TQ_QuestBoardWindow:onBack()
+    if self.mode == "dialogue" then
+        self.mode = "contacts"
+        self.selectedContactId = nil
+        self.jobsRevealed = false
+        self.currentLine = nil
+    elseif self.mode == "contacts" then
+        self.mode = "factions"
+        self.selectedFactionId = nil
+        self.factionGreetingLine = nil
+    end
+
+    self:refreshData()
 end
 
-function TQ_QuestBoardWindow:refreshData()
-    local selectedKey = entryKey(self:getSelectedEntry())
-    TrueQuests.QuestManager.updateAll(self.player)
-
-    self.questList:clear()
-    self.entries = {}
-    self.activeCount = 0
-    self.offerCount = 0
-    self.activeContactCount = #(TrueQuests.Factions and TrueQuests.Factions.getActiveContacts(self.player) or {})
-
-    local active = TrueQuests.QuestManager.getActiveQuests(self.player)
-    for _, quest in ipairs(active or {}) do
-        self.activeCount = self.activeCount + 1
-        if self.filter == "all" or self.filter == "active" then
-            local factionId = quest.factionId or "independent"
-            self:addEntry(tostring(quest.title), {
-                kind = "active",
-                quest = quest,
-                contactId = quest.contactId,
-                factionId = factionId,
-                badge = statusLabel(quest.status),
-                accent = statusColor(quest.status),
-                meta = factionName(factionId) .. " / " .. contactName(quest.contactId),
-            })
-        end
+function TQ_QuestBoardWindow:onDialogueJobs()
+    local contact = self:getSelectedContact()
+    if not contact then
+        return
     end
 
-    local offers = TrueQuests.QuestManager.getOffers(self.player, nil, 4)
-    for _, offer in ipairs(offers or {}) do
-        self.offerCount = self.offerCount + 1
-        if self.filter == "all" or self.filter == "offer" then
-            local factionId = offer.factionId or "independent"
-            self:addEntry(tostring(offer.title), {
-                kind = "offer",
-                offer = offer,
-                contactId = offer.contactId,
-                factionId = factionId,
-                badge = tostring(offer.difficulty),
-                accent = difficultyColor(offer.difficulty),
-                meta = factionName(factionId) .. " / " .. contactName(offer.contactId),
-            })
-        end
-    end
-
-    local fallbackSelected = 1
-    for index, row in ipairs(self.questList.items or {}) do
-        if entryKey(row.item) == selectedKey then
-            fallbackSelected = index
-            break
-        end
-    end
-
-    local itemCount = self.questList.items and #self.questList.items or 0
-    if itemCount > 0 then
-        self.questList.selected = fallbackSelected
-    end
-
-    self:updateFilterButtons()
-    self:updateButtons()
+    self.jobsRevealed = true
+    self.currentLine = TrueQuests.Dialogue.getContactLine(contact, "work", "Check the board. If anything is marked, it is yours to take.")
+    self:refreshData()
 end
 
-function TQ_QuestBoardWindow:updateButtons()
-    local entry = self:getSelectedEntry()
-    local canAccept = entry and entry.kind == "offer"
-    local canTurnIn = entry and entry.kind == "active"
-    local canTalk = self:getSelectedContact() ~= nil
-
-    self.acceptButton:setEnable(canAccept == true)
-    self.turnInButton:setEnable(canTurnIn == true)
-    self.talkButton:setEnable(canTalk == true)
-
-    if entry and entry.kind == "active" and entry.quest and entry.quest.status == "rewardPending" then
-        if self.turnInButton.setTitle then
-            self.turnInButton:setTitle("Rewards")
-        else
-            self.turnInButton.title = "Rewards"
-        end
-    else
-        if self.turnInButton.setTitle then
-            self.turnInButton:setTitle("Turn In")
-        else
-            self.turnInButton.title = "Turn In"
-        end
-    end
-end
-
-function TQ_QuestBoardWindow:onTalk()
+function TQ_QuestBoardWindow:onDialogueAbout()
     local contact = self:getSelectedContact()
     if contact then
-        TQ_DialogueWindow.Open(self.player, contact)
+        self.currentLine = TrueQuests.Dialogue.getContactLine(contact, "about", "There is not much to say over an open channel.")
     end
+    self.jobsRevealed = false
+    self:refreshData()
+end
+
+function TQ_QuestBoardWindow:onDialogueRumor()
+    local contact = self:getSelectedContact()
+    if contact then
+        self.currentLine = TrueQuests.Dialogue.getContactLine(contact, "rumor", "Nothing solid. Just static and bad roads.")
+    end
+    self.jobsRevealed = false
+    self:refreshData()
 end
 
 function TQ_QuestBoardWindow:onAccept()
-    local entry = self:getSelectedEntry()
+    local entry = self:getSelectedJobEntry()
     if not entry or entry.kind ~= "offer" then
         return
     end
 
     local quest, reason = TrueQuests.QuestManager.acceptQuest(self.player, entry.offer.templateId)
     if quest then
-        local line = TrueQuests.Dialogue.getLine(quest, "accept", "Request accepted.")
-        TrueQuests.say(self.player, line)
+        self.currentLine = TrueQuests.Dialogue.getLine(quest, "accept", "Request accepted.")
+        TrueQuests.say(self.player, self.currentLine)
     else
         TrueQuests.say(self.player, "Could not accept request: " .. tostring(reason))
     end
 
+    self.jobsRevealed = true
     self:refreshData()
 end
 
 function TQ_QuestBoardWindow:onTurnIn()
-    local entry = self:getSelectedEntry()
+    local entry = self:getSelectedJobEntry()
     if not entry or entry.kind ~= "active" then
         return
     end
@@ -348,30 +580,58 @@ function TQ_QuestBoardWindow:onTurnIn()
 
     local turnedIn, reason = TrueQuests.QuestManager.turnInQuest(self.player, quest.id)
     if turnedIn then
-        local line = TrueQuests.Dialogue.getLine(turnedIn, "complete", "Good work. Choose something from the cache.")
-        TrueQuests.say(self.player, line)
+        self.currentLine = TrueQuests.Dialogue.getLine(turnedIn, "complete", "Good work. Choose something from the cache.")
+        TrueQuests.say(self.player, self.currentLine)
         TQ_RewardChoiceWindow.Open(self.player, turnedIn)
     else
         TrueQuests.say(self.player, reasonText(reason, quest))
     end
 
+    self.jobsRevealed = true
     self:refreshData()
 end
 
-function TQ_QuestBoardWindow:drawHeader()
-    local x = self.contentX
-    local y = self.contentY
-    local width = self.width - self.contentX * 2
+function TQ_QuestBoardWindow:openFaction(factionId)
+    self.selectedFactionId = tostring(factionId)
+    self.mode = "contacts"
+    self.selectedContactId = nil
+    self.jobsRevealed = false
 
-    TQ_UITheme.drawPanel(self, x, y, width, self.headerH, "panelBg", "border")
-    TQ_UITheme.drawAccent(self, x, y, 4, self.headerH, "amber")
-    self:drawText("SURVIVOR REQUESTS", x + 14, y + 9, 0.96, 0.91, 0.79, 1, UIFont.Medium)
-    self:drawText("Radio relay board", x + 14, y + 33, 0.58, 0.63, 0.65, 1, UIFont.Small)
+    local discovered = TrueQuests.Factions and TrueQuests.Factions.isFactionDiscovered(self.player, factionId)
+    if TrueQuests.Factions then
+        TrueQuests.Factions.discoverFaction(self.player, factionId)
+    end
 
-    local summary = tostring(self.activeContactCount or 0) .. " contacts  /  "
-        .. tostring(self.activeCount or 0) .. " active  /  "
-        .. tostring(self.offerCount or 0) .. " available"
-    TQ_UITheme.drawTextRight(self, summary, x + width - 14, y + 18, "text", UIFont.Small)
+    local contacts = getActiveContactsForFaction(self.player, factionId, true)
+    local contact = nil
+    if #contacts > 0 then
+        contact = contacts[TrueQuests.randomInt(1, #contacts)]
+    end
+
+    if contact then
+        local fallback = discovered and "The frequency is open." or "A new voice answers through the static."
+        self.factionGreetingLine = TrueQuests.Dialogue.getContactLine(contact, "greeting", fallback)
+        self.factionGreetingName = tostring(contact.name or contact.id)
+    else
+        self.factionGreetingLine = "Only static answers for a moment, then the signal steadies."
+        self.factionGreetingName = factionName(factionId)
+    end
+
+    self:refreshData()
+end
+
+function TQ_QuestBoardWindow:openContact(contactId)
+    local contact = TrueQuests.getContact(contactId)
+    if not contact then
+        return
+    end
+
+    self.mode = "dialogue"
+    self.selectedContactId = tostring(contactId)
+    self.selectedFactionId = contactFactionId(contact)
+    self.jobsRevealed = false
+    self.currentLine = TrueQuests.Dialogue.getContactLine(contact, "greeting", "The signal clears.")
+    self:refreshData()
 end
 
 function TQ_QuestBoardWindow:drawChrome()
@@ -379,103 +639,210 @@ function TQ_QuestBoardWindow:drawChrome()
     self:drawRect(1, 1, self.width - 2, 23, 0.96, 0.095, 0.105, 0.125)
     self:drawRect(1, 24, self.width - 2, 1, 0.92, 0.30, 0.36, 0.42)
     self:drawText("TRUE QUESTS", 10, 6, 0.96, 0.91, 0.79, 1, UIFont.Small)
+    self:drawRect(self.width - 18, self.height - 5, 13, 1, 0.80, 0.36, 0.41, 0.46)
+    self:drawRect(self.width - 13, self.height - 10, 8, 1, 0.80, 0.36, 0.41, 0.46)
+    self:drawRect(self.width - 8, self.height - 15, 3, 1, 0.80, 0.36, 0.41, 0.46)
+end
+
+function TQ_QuestBoardWindow:drawHeader()
+    local title = "AVAILABLE SIGNALS"
+    local subtitle = "Choose a frequency group"
+
+    if self.mode == "contacts" and self.selectedFactionId then
+        title = string.upper(factionName(self.selectedFactionId))
+        subtitle = "Active voices on this frequency"
+    elseif self.mode == "dialogue" then
+        local contact = self:getSelectedContact()
+        title = string.upper(tostring(contact and contact.name or "CONTACT"))
+        subtitle = factionName(self.selectedFactionId)
+    end
+
+    TQ_UITheme.drawPanel(self, self.bodyX, self.bodyY, self.bodyW, self.headerH, "panelBg", "border")
+    TQ_UITheme.drawAccent(self, self.bodyX, self.bodyY, 4, self.headerH, "amber")
+    self:drawText(title, self.bodyX + 16, self.bodyY + 10, 0.96, 0.91, 0.79, 1, UIFont.Medium)
+    self:drawText(subtitle, self.bodyX + 16, self.bodyY + 39, 0.58, 0.63, 0.65, 1, UIFont.Small)
+
+    local summary = tostring(self.activeContactCount or 0) .. " voices / "
+        .. tostring(self.activeCount or 0) .. " active / "
+        .. tostring(self.offerCount or 0) .. " available"
+    TQ_UITheme.drawTextRight(self, summary, self.bodyX + self.bodyW - 16, self.bodyY + 28, "text", UIFont.Small)
 end
 
 function TQ_QuestBoardWindow:prerender()
+    self:applyLayout()
+    self:updateControls()
     self:drawChrome()
     self:drawHeader()
-    TQ_UITheme.drawPanel(self, self.listX, self.listY, self.listW, self.listH, "listBg", "borderSoft")
-    TQ_UITheme.drawPanel(self, self.detailX, self.detailY, self.detailW, self.detailH, "panelBg", "borderSoft")
+    TQ_UITheme.drawPanel(self, self.contentX, self.contentY, self.contentW, self.contentH, "listBg", "borderSoft")
+
+    if self.mode == "factions" then
+        self:drawFactionCards()
+    elseif self.mode == "contacts" then
+        self:drawContactCards()
+    elseif self.mode == "dialogue" then
+        self:drawDialogue()
+    end
 end
 
-function TQ_QuestBoardWindow:drawOfferDetails(entry, x, y, width)
-    local offer = entry.offer
-    local title = TQ_UITheme.truncate(offer.title, width - 8, UIFont.Medium)
-    local factionId = offer.factionId or entry.factionId or "independent"
+function TQ_QuestBoardWindow:drawImagePlaceholder(x, y, width, height, label)
+    TQ_UITheme.drawPanel(self, x, y, width, height, "panelBg", "borderSoft")
+    self:drawTextCentre(tostring(label or "?"), x + width / 2, y + height / 2 - 10, 0.68, 0.72, 0.74, 1, UIFont.Large)
+end
 
-    self:drawText(title, x, y, 0.96, 0.91, 0.79, 1, UIFont.Medium)
-    y = y + 30
-    TQ_UITheme.drawPill(self, x, y, 78, 21, tostring(offer.difficulty), difficultyColor(offer.difficulty))
-    self:drawText("Contact: " .. contactName(offer.contactId), x + 92, y + 4, 0.70, 0.75, 0.76, 1, UIFont.Small)
-    y = y + 27
-    self:drawText("Faction: " .. factionName(factionId), x, y, 0.70, 0.75, 0.76, 1, UIFont.Small)
-    TQ_UITheme.drawTextRight(self, reputationText(self.player, factionId), x + width, y, "text", UIFont.Small)
-    y = y + 30
+function TQ_QuestBoardWindow:drawFactionCard(card, x, y, size)
+    local discovered = TrueQuests.Factions and TrueQuests.Factions.isFactionDiscovered(self.player, card.factionId)
+    local faction = card.faction or {}
+    local imagePath = discovered and (faction.fullImage or faction.icon) or (faction.unknownImage or UNKNOWN_FACTION_IMAGE)
+    local texture = getTextureSafe(imagePath)
+    local accent = discovered and factionAccent(card.factionId) or "border"
 
-    self:drawText("Request", x, y, 0.78, 0.82, 0.80, 1, UIFont.Small)
-    y = y + 20
-    y = TQ_UITheme.drawWrapped(self, offer.description, x, y, width, 7, "text", UIFont.Small)
+    TQ_UITheme.drawPanel(self, x, y, size, size, "panelBg", accent)
+    TQ_UITheme.drawAccent(self, x, y, 5, size, discovered and factionAccent(card.factionId) or "borderSoft")
 
-    local template = offer.template or {}
-    if template.objectives and #template.objectives > 0 then
-        y = y + 18
-        self:drawText("Expected work", x, y, 0.78, 0.82, 0.80, 1, UIFont.Small)
-        y = y + 20
-        for _, objective in ipairs(template.objectives or {}) do
-            local label = tostring(objective.label or objective.item or objective.type or "Objective")
-            self:drawText("- " .. label, x, y, 0.88, 0.89, 0.87, 1, UIFont.Small)
-            y = y + 18
+    local imagePad = 12
+    local imageH = size - 72
+    if not drawTextureFit(self, texture, x + imagePad, y + imagePad, size - imagePad * 2, imageH, discovered and 1 or 0.72) then
+        self:drawImagePlaceholder(x + imagePad, y + imagePad, size - imagePad * 2, imageH, discovered and string.sub(card.name, 1, 1) or "?")
+    end
+
+    if discovered then
+        self:drawTextCentre(TQ_UITheme.truncate(card.name, size - 18, UIFont.Medium), x + size / 2, y + size - 50, 0.96, 0.91, 0.79, 1, UIFont.Medium)
+        local meta = tostring(card.activeContacts or 0) .. " voices / " .. tostring((card.activeQuests or 0) + (card.offers or 0)) .. " jobs"
+        self:drawTextCentre(meta, x + size / 2, y + size - 25, 0.58, 0.63, 0.65, 1, UIFont.Small)
+    else
+        self:drawTextCentre("UNKNOWN SIGNAL", x + size / 2, y + size - 43, 0.70, 0.75, 0.76, 1, UIFont.Small)
+    end
+
+    table.insert(self.cardHitboxes, {
+        kind = "faction",
+        factionId = card.factionId,
+        x = x,
+        y = y,
+        width = size,
+        height = size,
+    })
+end
+
+function TQ_QuestBoardWindow:drawFactionCards()
+    self.cardHitboxes = {}
+    local count = tableCount(self.factionCards)
+    if count == 0 then
+        self:drawText("No active signals on this frequency.", self.contentX + 18, self.contentY + 18, 0.70, 0.75, 0.76, 1, UIFont.Small)
+        return
+    end
+
+    local gap = 18
+    local maxColumns = math.max(1, math.floor((self.contentW + gap) / (180 + gap)))
+    local columns = math.min(count, maxColumns)
+    local cardSize = clamp(math.floor((self.contentW - gap * (columns - 1) - 36) / columns), 160, 256)
+    columns = math.max(1, math.floor((self.contentW + gap) / (cardSize + gap)))
+
+    local totalW = math.min(count, columns) * cardSize + math.max(0, math.min(count, columns) - 1) * gap
+    local startX = self.contentX + (self.contentW - totalW) / 2
+    local startY = self.contentY + 26
+
+    for index, card in ipairs(self.factionCards or {}) do
+        local col = (index - 1) % columns
+        local row = math.floor((index - 1) / columns)
+        self:drawFactionCard(card, startX + col * (cardSize + gap), startY + row * (cardSize + gap), cardSize)
+    end
+end
+
+function TQ_QuestBoardWindow:drawContactCard(contact, x, y, width, height)
+    local texture = getTextureSafe(contact.portrait or contact.icon)
+    TQ_UITheme.drawPanel(self, x, y, width, height, "panelBg", "borderSoft")
+    TQ_UITheme.drawAccent(self, x, y, 5, height, factionAccent(self.selectedFactionId))
+
+    local imageSize = math.min(width - 24, height - 80)
+    local imageX = x + (width - imageSize) / 2
+    local imageY = y + 14
+    if not drawTextureFit(self, texture, imageX, imageY, imageSize, imageSize, 1) then
+        self:drawImagePlaceholder(imageX, imageY, imageSize, imageSize, string.sub(tostring(contact.name or "?"), 1, 1))
+    end
+
+    self:drawTextCentre(TQ_UITheme.truncate(tostring(contact.name or contact.id), width - 18, UIFont.Medium), x + width / 2, y + height - 54, 0.96, 0.91, 0.79, 1, UIFont.Medium)
+    self:drawTextCentre(tostring(contact.role or "contact"), x + width / 2, y + height - 27, 0.58, 0.63, 0.65, 1, UIFont.Small)
+
+    table.insert(self.cardHitboxes, {
+        kind = "contact",
+        contactId = contact.id,
+        x = x,
+        y = y,
+        width = width,
+        height = height,
+    })
+end
+
+function TQ_QuestBoardWindow:drawContactCards()
+    self.cardHitboxes = {}
+    local contacts = self.contactCards or {}
+    local x = self.contentX + 18
+    local y = self.contentY + 18
+
+    if self.factionGreetingLine and self.factionGreetingLine ~= "" then
+        TQ_UITheme.drawPanel(self, x, y, self.contentW - 36, 64, "panelBg", "borderSoft")
+        TQ_UITheme.drawAccent(self, x, y, 4, 64, factionAccent(self.selectedFactionId))
+        self:drawText(tostring(self.factionGreetingName or factionName(self.selectedFactionId)), x + 14, y + 9, 0.96, 0.91, 0.79, 1, UIFont.Small)
+        TQ_UITheme.drawWrapped(self, self.factionGreetingLine, x + 14, y + 30, self.contentW - 64, 2, "text", UIFont.Small)
+        y = y + 82
+    end
+
+    if #contacts == 0 then
+        self:drawText("No one is answering from this faction right now.", x, y, 0.70, 0.75, 0.76, 1, UIFont.Small)
+        return
+    end
+
+    local gap = 16
+    local cardW = clamp(math.floor((self.contentW - 36 - gap * 2) / 3), 150, 210)
+    local cardH = cardW + 70
+    local columns = math.max(1, math.floor((self.contentW - 36 + gap) / (cardW + gap)))
+
+    for index, contact in ipairs(contacts) do
+        local col = (index - 1) % columns
+        local row = math.floor((index - 1) / columns)
+        self:drawContactCard(contact, x + col * (cardW + gap), y + row * (cardH + gap), cardW, cardH)
+    end
+end
+
+function TQ_QuestBoardWindow:drawDialogue()
+    local contact = self:getSelectedContact()
+    if not contact then
+        return
+    end
+
+    local leftX = self.contentX + 14
+    local leftY = self.contentY + 14
+    local leftW = self.dialoguePortraitW - 28
+    local leftH = self.contentH - 28
+    TQ_UITheme.drawPanel(self, leftX, leftY, leftW, leftH, "panelBg", "borderSoft")
+    TQ_UITheme.drawAccent(self, leftX, leftY, 5, leftH, factionAccent(self.selectedFactionId))
+
+    local portraitSize = math.min(leftW - 28, 210)
+    local portraitX = leftX + (leftW - portraitSize) / 2
+    local portraitY = leftY + 16
+    local texture = getTextureSafe(contact.portrait or contact.icon)
+    if not drawTextureFit(self, texture, portraitX, portraitY, portraitSize, portraitSize, 1) then
+        self:drawImagePlaceholder(portraitX, portraitY, portraitSize, portraitSize, string.sub(tostring(contact.name or "?"), 1, 1))
+    end
+
+    self:drawTextCentre(TQ_UITheme.truncate(tostring(contact.name or contact.id), leftW - 18, UIFont.Medium), leftX + leftW / 2, portraitY + portraitSize + 16, 0.96, 0.91, 0.79, 1, UIFont.Medium)
+    self:drawTextCentre(tostring(contact.role or "contact"), leftX + leftW / 2, portraitY + portraitSize + 43, 0.58, 0.63, 0.65, 1, UIFont.Small)
+    self:drawTextCentre(reputationText(self.player, self.selectedFactionId), leftX + leftW / 2, portraitY + portraitSize + 67, 0.78, 0.82, 0.80, 1, UIFont.Small)
+
+    TQ_UITheme.drawPanel(self, self.dialogueX, self.dialogueY, self.dialogueW, self.dialogueH, "panelBg", "borderSoft")
+    TQ_UITheme.drawPanel(self, self.dialogueX + 12, self.dialogueY + 14, self.dialogueW - 24, 104, "listBg", "borderSoft")
+    TQ_UITheme.drawWrapped(self, self.currentLine or "", self.dialogueX + 28, self.dialogueY + 30, self.dialogueW - 56, 4, "text", UIFont.Small)
+
+    if self.jobsRevealed then
+        self:drawText("Available work", self.jobsX, self.jobsY - 20, 0.78, 0.82, 0.80, 1, UIFont.Small)
+        if not self.questList.items or #self.questList.items == 0 then
+            self:drawText("No requests from this contact right now.", self.jobsX, self.jobsY + 8, 0.54, 0.58, 0.60, 1, UIFont.Small)
         end
     end
 end
 
-function TQ_QuestBoardWindow:drawQuestDetails(entry, x, y, width)
-    local quest = entry.quest
-    local title = TQ_UITheme.truncate(quest.title, width - 8, UIFont.Medium)
-    local factionId = quest.factionId or entry.factionId or "independent"
-
-    self:drawText(title, x, y, 0.96, 0.91, 0.79, 1, UIFont.Medium)
-    y = y + 30
-    TQ_UITheme.drawPill(self, x, y, 84, 21, statusLabel(quest.status), statusColor(quest.status))
-    self:drawText("Contact: " .. contactName(quest.contactId), x + 98, y + 4, 0.70, 0.75, 0.76, 1, UIFont.Small)
-    y = y + 27
-    self:drawText("Faction: " .. factionName(factionId), x, y, 0.70, 0.75, 0.76, 1, UIFont.Small)
-    TQ_UITheme.drawTextRight(self, reputationText(self.player, factionId), x + width, y, "text", UIFont.Small)
-    y = y + 28
-
-    self:drawText("Turn in: " .. TrueQuests.turnInToText(quest.turnIn), x, y, 0.70, 0.75, 0.76, 1, UIFont.Small)
-    y = y + 28
-
-    self:drawText("Objectives", x, y, 0.78, 0.82, 0.80, 1, UIFont.Small)
-    y = y + 20
-    for _, objective in ipairs(quest.objectives or {}) do
-        local mark = objective.completed and "[x]" or "[ ]"
-        local line = mark .. " " .. TrueQuests.Objectives.describe(objective)
-        self:drawText(TQ_UITheme.truncate(line, width, UIFont.Small), x, y, 0.88, 0.89, 0.87, 1, UIFont.Small)
-        y = y + 18
-    end
-
-    if quest.status == "rewardPending" then
-        y = y + 10
-        self:drawText("Reward cache is ready.", x, y, 0.91, 0.74, 0.40, 1, UIFont.Small)
-        y = y + 20
-    end
-
-    y = y + 12
-    self:drawText("Notes", x, y, 0.78, 0.82, 0.80, 1, UIFont.Small)
-    y = y + 20
-    TQ_UITheme.drawWrapped(self, quest.description, x, y, width, 6, "dim", UIFont.Small)
-end
-
 function TQ_QuestBoardWindow:render()
     ISPanel.render(self)
-
-    local x = self.detailX + 14
-    local y = self.detailY + 14
-    local width = self.detailW - 28
-    local entry = self:getSelectedEntry()
-
-    if not entry then
-        self:drawText("No requests on this frequency.", x, y, 0.70, 0.75, 0.76, 1, UIFont.Small)
-        self:drawText("Refresh the board or check back after accepting work.", x, y + 21, 0.54, 0.58, 0.60, 1, UIFont.Small)
-        return
-    end
-
-    if entry.kind == "offer" then
-        self:drawOfferDetails(entry, x, y, width)
-    elseif entry.kind == "active" then
-        self:drawQuestDetails(entry, x, y, width)
-    end
 end
 
 function TQ_QuestBoardWindow:isRadioStillAccessible()
@@ -493,7 +860,6 @@ end
 
 function TQ_QuestBoardWindow:update()
     ISPanel.update(self)
-    self:updateButtons()
 
     self.radioCheckTicks = (self.radioCheckTicks or 0) + 1
     if self.radioCheckTicks >= 30 then
@@ -503,6 +869,90 @@ function TQ_QuestBoardWindow:update()
             self:close()
         end
     end
+end
+
+function TQ_QuestBoardWindow:isInResizeHandle(x, y)
+    return self.resizable == true and x >= self.width - 18 and y >= self.height - 18
+end
+
+function TQ_QuestBoardWindow:resizeBy(dx, dy)
+    local newWidth = math.max(self.minimumWidth or 820, self.width + dx)
+    local newHeight = math.max(self.minimumHeight or 560, self.height + dy)
+
+    if self.setWidth then self:setWidth(newWidth) else self.width = newWidth end
+    if self.setHeight then self:setHeight(newHeight) else self.height = newHeight end
+    self.width = newWidth
+    self.height = newHeight
+    self:applyLayout()
+end
+
+function TQ_QuestBoardWindow:handleCardClick(x, y)
+    for _, hitbox in ipairs(self.cardHitboxes or {}) do
+        if x >= hitbox.x and y >= hitbox.y and x <= hitbox.x + hitbox.width and y <= hitbox.y + hitbox.height then
+            if hitbox.kind == "faction" then
+                self:openFaction(hitbox.factionId)
+                return true
+            elseif hitbox.kind == "contact" then
+                self:openContact(hitbox.contactId)
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function TQ_QuestBoardWindow:onMouseDown(x, y)
+    if self:isInResizeHandle(x, y) then
+        self.isResizing = true
+        return true
+    end
+
+    if self:handleCardClick(x, y) then
+        return true
+    end
+
+    if ISPanel.onMouseDown then
+        return ISPanel.onMouseDown(self, x, y)
+    end
+    return false
+end
+
+function TQ_QuestBoardWindow:onMouseMove(dx, dy)
+    if self.isResizing then
+        self:resizeBy(dx, dy)
+        return
+    end
+
+    if ISPanel.onMouseMove then
+        ISPanel.onMouseMove(self, dx, dy)
+    end
+end
+
+function TQ_QuestBoardWindow:onMouseMoveOutside(dx, dy)
+    if self.isResizing then
+        self:resizeBy(dx, dy)
+        return
+    end
+
+    if ISPanel.onMouseMoveOutside then
+        ISPanel.onMouseMoveOutside(self, dx, dy)
+    end
+end
+
+function TQ_QuestBoardWindow:onMouseUp(x, y)
+    self.isResizing = false
+    if ISPanel.onMouseUp then
+        return ISPanel.onMouseUp(self, x, y)
+    end
+    return true
+end
+
+function TQ_QuestBoardWindow:onMouseUpOutside(x, y)
+    self.isResizing = false
+    if ISPanel.onMouseUpOutside then
+        return ISPanel.onMouseUpOutside(self, x, y)
+    end
+    return true
 end
 
 function TQ_QuestBoardWindow:close()
@@ -518,9 +968,14 @@ function TQ_QuestBoardWindow:new(x, y, width, height, player, device)
     self.__index = self
     o.player = player
     o.device = device
-    o.resizable = false
+    o.resizable = true
+    o.minimumWidth = 820
+    o.minimumHeight = 560
     o.moveWithMouse = true
-    o.filter = "all"
+    o.mode = "factions"
+    o.selectedFactionId = nil
+    o.selectedContactId = nil
+    o.jobsRevealed = false
     o.radioCheckTicks = 0
     TQ_UITheme.applyWindow(o)
     return o
@@ -539,8 +994,8 @@ function TQ_QuestBoardWindow.Open(player, device)
         TQ_QuestBoardWindow.instance:close()
     end
 
-    local width = 690
-    local height = 450
+    local width = 960
+    local height = 640
     local x = (getCore():getScreenWidth() - width) / 2
     local y = (getCore():getScreenHeight() - height) / 2
     local window = TQ_QuestBoardWindow:new(x, y, width, height, player, device)
