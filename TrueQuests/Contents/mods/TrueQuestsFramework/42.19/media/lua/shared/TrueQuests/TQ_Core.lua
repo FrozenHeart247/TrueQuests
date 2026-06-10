@@ -7,7 +7,7 @@ if not TQ._coreLoaded then
 
     TQ.VERSION = "0.1.0"
     TQ.API_VERSION = 1
-    TQ.DATA_VERSION = 1
+    TQ.DATA_VERSION = 3
     TQ.MOD_ID = "TrueQuestsFramework"
     TQ.DEBUG = false
 
@@ -202,4 +202,3 @@ if not TQ._coreLoaded then
         return "Unknown location"
     end
 end
-

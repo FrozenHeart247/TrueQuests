@@ -217,6 +217,123 @@ local function entryKey(entry)
     return nil
 end
 
+local function objectiveCountText(value)
+    if type(value) == "table" then
+        local minValue = tonumber(value.min or value[1]) or 1
+        local maxValue = tonumber(value.max or value[2]) or minValue
+        if minValue == maxValue then
+            return tostring(minValue)
+        end
+        return tostring(minValue) .. "-" .. tostring(maxValue)
+    end
+
+    return tostring(tonumber(value) or 1)
+end
+
+local function describeObjectiveTemplate(objective)
+    if type(objective) ~= "table" then
+        return ""
+    end
+
+    if objective.type == "item" then
+        local name = objective.label or TrueQuests.getItemDisplayName(objective.item)
+        return "Bring " .. tostring(name) .. " x" .. objectiveCountText(objective.count or objective.required or 1)
+    end
+
+    if objective.description then
+        return tostring(objective.description)
+    end
+
+    return "Complete " .. tostring(objective.type or "objective")
+end
+
+local function resolveOfferTurnIn(offer)
+    local template = offer and offer.template or nil
+    if template and type(template.turnIn) == "table" then
+        return template.turnIn
+    end
+
+    local contact = offer and TrueQuests.getContact and TrueQuests.getContact(offer.contactId) or nil
+    if contact and type(contact.turnIn) == "table" then
+        return contact.turnIn
+    end
+
+    return nil
+end
+
+local function appendTurnIn(text, turnIn)
+    local location = TrueQuests.turnInToText and TrueQuests.turnInToText(turnIn) or ""
+    if location ~= "" and location ~= "Unknown location" then
+        return tostring(text or "") .. ". Turn in: " .. tostring(location)
+    end
+    return tostring(text or "")
+end
+
+local function offerMetaText(offer)
+    local template = offer and offer.template or nil
+    local objectives = template and template.objectives or nil
+    local text = ""
+
+    if type(objectives) == "table" and #objectives > 0 then
+        text = describeObjectiveTemplate(objectives[1])
+        if #objectives > 1 then
+            text = text .. " +" .. tostring(#objectives - 1) .. " more"
+        end
+    elseif offer and offer.description and tostring(offer.description) ~= "" then
+        text = tostring(offer.description)
+    else
+        text = "Ask for details."
+    end
+
+    return appendTurnIn(text, resolveOfferTurnIn(offer))
+end
+
+local function questMetaText(quest)
+    local parts = {}
+    for _, objective in ipairs(quest and quest.objectives or {}) do
+        table.insert(parts, TrueQuests.Objectives.describe(objective))
+        if #parts >= 2 then
+            break
+        end
+    end
+
+    local text = #parts > 0 and table.concat(parts, "; ") or tostring((quest and quest.description) or "")
+    if text == "" then
+        text = "Quest in progress."
+    end
+
+    return appendTurnIn(text, quest and quest.turnIn)
+end
+
+local function offerRefreshDue(player)
+    if not TrueQuests.Save or not TrueQuests.Save.getData or not TrueQuests.getWorldAgeHours then
+        return false
+    end
+
+    local data = TrueQuests.Save.getData(player)
+    local refreshAt = tonumber(data and data.offers and data.offers.refreshAt) or 0
+    return refreshAt > 0 and TrueQuests.getWorldAgeHours() >= refreshAt
+end
+
+local function offerRefreshText(player)
+    if not TrueQuests.Save or not TrueQuests.Save.getData or not TrueQuests.getWorldAgeHours then
+        return ""
+    end
+
+    local data = TrueQuests.Save.getData(player)
+    local refreshAt = tonumber(data and data.offers and data.offers.refreshAt) or 0
+    if refreshAt <= 0 then
+        return ""
+    end
+
+    local remaining = math.max(0, refreshAt - TrueQuests.getWorldAgeHours())
+    if remaining <= 0 then
+        return "refreshing"
+    end
+
+    return "refresh in " .. tostring(math.ceil(remaining)) .. "h"
+end
+
 function TQ_QuestBoardWindow:initialise()
     ISPanel.initialise(self)
 end
@@ -240,9 +357,17 @@ function TQ_QuestBoardWindow:createChildren()
     self.closeButton = makeButton(self, self.width - 108, self.height - 40, 92, 26, "Close", TQ_QuestBoardWindow.close, "muted")
     self.topCloseButton = makeButton(self, self.width - 27, 3, 21, 18, "X", TQ_QuestBoardWindow.close, "danger")
 
-    self.workButton = makeButton(self, self.optionsX, self.optionsY, 120, 26, "Jobs", TQ_QuestBoardWindow.onDialogueJobs, "info")
-    self.aboutButton = makeButton(self, self.optionsX + 130, self.optionsY, 120, 26, "About", TQ_QuestBoardWindow.onDialogueAbout, "default")
-    self.rumorButton = makeButton(self, self.optionsX + 260, self.optionsY, 120, 26, "Rumor", TQ_QuestBoardWindow.onDialogueRumor, "muted")
+    self.optionButtons = {}
+    for index = 1, 6 do
+        local optionIndex = index
+        local button = ISButton:new(self.optionsX, self.optionsY, 260, 28, "", self, function(target)
+            target:onDialogueOption(optionIndex)
+        end)
+        button:initialise()
+        TQ_UITheme.styleButton(button, "default")
+        self:addChild(button)
+        table.insert(self.optionButtons, button)
+    end
 
     self:applyLayout()
     self:refreshData()
@@ -284,9 +409,9 @@ function TQ_QuestBoardWindow:applyLayout()
     setChildBounds(self.turnInButton, 314, self.height - 40, 102, 26)
     setChildBounds(self.closeButton, self.width - 108, self.height - 40, 92, 26)
     setChildBounds(self.topCloseButton, self.width - 27, 3, 21, 18)
-    setChildBounds(self.workButton, self.optionsX, self.optionsY, 120, 26)
-    setChildBounds(self.aboutButton, self.optionsX + 130, self.optionsY, 120, 26)
-    setChildBounds(self.rumorButton, self.optionsX + 260, self.optionsY, 120, 26)
+    for index, button in ipairs(self.optionButtons or {}) do
+        setChildBounds(button, self.optionsX, self.optionsY + (index - 1) * 36, math.min(420, self.dialogueW - 24), 28)
+    end
 end
 
 function TQ_QuestBoardWindow:refreshData()
@@ -399,7 +524,7 @@ function TQ_QuestBoardWindow:refreshJobList(selectedKey)
                 factionId = quest.factionId or self.selectedFactionId,
                 badge = statusLabel(quest.status),
                 accent = statusColor(quest.status),
-                meta = TrueQuests.turnInToText(quest.turnIn),
+                meta = questMetaText(quest),
             }
             table.insert(self.entries, entry)
             self.questList:addItem(tostring(quest.title), entry)
@@ -416,7 +541,7 @@ function TQ_QuestBoardWindow:refreshJobList(selectedKey)
             factionId = offer.factionId or self.selectedFactionId,
             badge = tostring(offer.difficulty),
             accent = difficultyColor(offer.difficulty),
-            meta = "new request",
+            meta = offerMetaText(offer),
         }
         table.insert(self.entries, entry)
         self.questList:addItem(tostring(offer.title), entry)
@@ -443,11 +568,9 @@ function TQ_QuestBoardWindow:updateControls()
     local selected = self:getSelectedJobEntry()
 
     setVisible(self.questList, showJobs)
-    setVisible(self.workButton, inDialogue)
-    setVisible(self.aboutButton, inDialogue)
-    setVisible(self.rumorButton, inDialogue)
     setVisible(self.acceptButton, showJobs)
     setVisible(self.turnInButton, showJobs)
+    self:updateDialogueOptions()
 
     self.backButton:setEnable(self.mode ~= "factions")
     self.refreshButton:setEnable(true)
@@ -510,6 +633,9 @@ function TQ_QuestBoardWindow:onBack()
         self.selectedContactId = nil
         self.jobsRevealed = false
         self.currentLine = nil
+        self.currentDialogueNode = nil
+        self.currentDialogueNodeData = nil
+        self.dialogueOptions = nil
     elseif self.mode == "contacts" then
         self.mode = "factions"
         self.selectedFactionId = nil
@@ -519,7 +645,26 @@ function TQ_QuestBoardWindow:onBack()
     self:refreshData()
 end
 
-function TQ_QuestBoardWindow:onDialogueJobs()
+function TQ_QuestBoardWindow:loadDialogueNode(nodeId)
+    local contact = self:getSelectedContact()
+    if not contact then
+        return
+    end
+
+    local node = TrueQuests.Dialogue and TrueQuests.Dialogue.getTreeNode and TrueQuests.Dialogue.getTreeNode(contact, nodeId) or nil
+    self.currentDialogueNode = tostring(nodeId or "start")
+    self.currentDialogueNodeData = node
+    self.currentLine = tostring((node and node.npcLine) or TrueQuests.Dialogue.getContactLine(contact, "greeting", "The signal clears."))
+    self.dialogueOptions = type(node and node.options) == "table" and node.options or {}
+    self.jobsRevealed = false
+end
+
+function TQ_QuestBoardWindow:setDialogueNode(nodeId)
+    self:loadDialogueNode(nodeId)
+    self:refreshData()
+end
+
+function TQ_QuestBoardWindow:showJobsFromDialogue()
     local contact = self:getSelectedContact()
     if not contact then
         return
@@ -527,25 +672,55 @@ function TQ_QuestBoardWindow:onDialogueJobs()
 
     self.jobsRevealed = true
     self.currentLine = TrueQuests.Dialogue.getContactLine(contact, "work", "Check the board. If anything is marked, it is yours to take.")
+    self.dialogueOptions = {
+        { text = "Back to conversation.", action = "back_dialogue" },
+    }
     self:refreshData()
 end
 
-function TQ_QuestBoardWindow:onDialogueAbout()
-    local contact = self:getSelectedContact()
-    if contact then
-        self.currentLine = TrueQuests.Dialogue.getContactLine(contact, "about", "There is not much to say over an open channel.")
+function TQ_QuestBoardWindow:updateDialogueOptions()
+    local inDialogue = self.mode == "dialogue"
+    local options = inDialogue and self.dialogueOptions or {}
+
+    for index, button in ipairs(self.optionButtons or {}) do
+        local option = options and options[index] or nil
+        local visible = option ~= nil
+        setVisible(button, visible)
+        if visible then
+            setButtonTitle(button, tostring(option.text or "..."))
+            local kind = option.action == "show_jobs" and "info"
+                or option.action == "close" and "muted"
+                or option.action == "back_dialogue" and "muted"
+                or "default"
+            TQ_UITheme.styleButton(button, kind)
+        end
     end
-    self.jobsRevealed = false
-    self:refreshData()
 end
 
-function TQ_QuestBoardWindow:onDialogueRumor()
-    local contact = self:getSelectedContact()
-    if contact then
-        self.currentLine = TrueQuests.Dialogue.getContactLine(contact, "rumor", "Nothing solid. Just static and bad roads.")
+function TQ_QuestBoardWindow:onDialogueOption(index)
+    local option = self.dialogueOptions and self.dialogueOptions[index] or nil
+    if not option then
+        return
     end
-    self.jobsRevealed = false
-    self:refreshData()
+
+    if option.next then
+        self:setDialogueNode(option.next)
+        return
+    end
+
+    if option.action == "show_jobs" then
+        self:showJobsFromDialogue()
+        return
+    end
+
+    if option.action == "back_dialogue" then
+        self:setDialogueNode(self.currentDialogueNode or "start")
+        return
+    end
+
+    if option.action == "close" then
+        self:close()
+    end
 end
 
 function TQ_QuestBoardWindow:onAccept()
@@ -630,7 +805,7 @@ function TQ_QuestBoardWindow:openContact(contactId)
     self.selectedContactId = tostring(contactId)
     self.selectedFactionId = contactFactionId(contact)
     self.jobsRevealed = false
-    self.currentLine = TrueQuests.Dialogue.getContactLine(contact, "greeting", "The signal clears.")
+    self:loadDialogueNode("start")
     self:refreshData()
 end
 
@@ -833,8 +1008,15 @@ function TQ_QuestBoardWindow:drawDialogue()
     TQ_UITheme.drawPanel(self, self.dialogueX + 12, self.dialogueY + 14, self.dialogueW - 24, 104, "listBg", "borderSoft")
     TQ_UITheme.drawWrapped(self, self.currentLine or "", self.dialogueX + 28, self.dialogueY + 30, self.dialogueW - 56, 4, "text", UIFont.Small)
 
+    self:drawText(self.jobsRevealed and "Conversation" or "Choose a response", self.optionsX, self.optionsY - 20, 0.78, 0.82, 0.80, 1, UIFont.Small)
+
     if self.jobsRevealed then
-        self:drawText("Available work", self.jobsX, self.jobsY - 20, 0.78, 0.82, 0.80, 1, UIFont.Small)
+        local refreshText = offerRefreshText(self.player)
+        local label = "Available work"
+        if refreshText ~= "" then
+            label = label .. " (" .. refreshText .. ")"
+        end
+        self:drawText(label, self.jobsX, self.jobsY - 20, 0.78, 0.82, 0.80, 1, UIFont.Small)
         if not self.questList.items or #self.questList.items == 0 then
             self:drawText("No requests from this contact right now.", self.jobsX, self.jobsY + 8, 0.54, 0.58, 0.60, 1, UIFont.Small)
         end
@@ -868,6 +1050,18 @@ function TQ_QuestBoardWindow:update()
             TrueQuests.say(self.player, "The radio signal falls out of range.")
             self:close()
         end
+    end
+
+    if self.mode == "dialogue" and self.jobsRevealed == true and self.selectedContactId then
+        self.offerRefreshCheckTicks = (self.offerRefreshCheckTicks or 0) + 1
+        if self.offerRefreshCheckTicks >= 60 then
+            self.offerRefreshCheckTicks = 0
+            if offerRefreshDue(self.player) then
+                self:refreshData()
+            end
+        end
+    else
+        self.offerRefreshCheckTicks = 0
     end
 end
 

@@ -20,6 +20,12 @@ function TQ.Save.createDefaultData()
             factions = {},
             contacts = {},
         },
+        offers = {
+            refreshAt = 0,
+            generatedAt = 0,
+            generation = 0,
+            byContact = {},
+        },
         history = {},
     }
 end
@@ -39,6 +45,11 @@ function TQ.Save.migrate(data)
     data.reputation = type(data.reputation) == "table" and data.reputation or {}
     data.reputation.factions = type(data.reputation.factions) == "table" and data.reputation.factions or {}
     data.reputation.contacts = type(data.reputation.contacts) == "table" and data.reputation.contacts or {}
+    data.offers = type(data.offers) == "table" and data.offers or {}
+    data.offers.refreshAt = tonumber(data.offers.refreshAt) or 0
+    data.offers.generatedAt = tonumber(data.offers.generatedAt) or math.max(0, data.offers.refreshAt - 6)
+    data.offers.generation = tonumber(data.offers.generation) or 0
+    data.offers.byContact = type(data.offers.byContact) == "table" and data.offers.byContact or {}
     data.history = type(data.history) == "table" and data.history or {}
 
     if data.version < TQ.DATA_VERSION then

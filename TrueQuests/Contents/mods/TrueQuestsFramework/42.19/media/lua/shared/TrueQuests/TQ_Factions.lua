@@ -7,7 +7,7 @@ local TQ = TrueQuests
 TQ.Factions = TQ.Factions or {}
 
 local DEFAULT_FACTION_ID = "independent"
-local ACTIVE_CONTACTS_VERSION = 1
+local ACTIVE_CONTACTS_VERSION = 2
 local DEFAULT_REPUTATION = {
     easy = 5,
     medium = 10,
@@ -66,6 +66,14 @@ local function tableIsEmpty(value)
     end
 
     return true
+end
+
+local function listToSet(list)
+    local result = {}
+    for _, value in ipairs(list or {}) do
+        result[tostring(value or "")] = true
+    end
+    return result
 end
 
 function TQ.registerFaction(definition)
@@ -184,10 +192,12 @@ local function pickRandomContacts(pool, count, out, seen)
     end
 end
 
-local function rollFactionContacts(faction, contacts, day, hour)
+local function rollFactionContacts(faction, contacts, day, hour, previousIds)
     local selected = {}
     local seen = {}
     local pool = {}
+    local repeatedPool = {}
+    local previousSet = listToSet(previousIds)
     local maxActive = tonumber(faction and faction.maxActiveMembers) or #contacts
 
     table.sort(contacts, function(a, b)
@@ -199,13 +209,19 @@ local function rollFactionContacts(faction, contacts, day, hour)
             if isAlwaysActive(contact) then
                 addUnique(selected, seen, contact.id)
             else
-                table.insert(pool, contact)
+                if previousSet[tostring(contact.id or "")] then
+                    table.insert(repeatedPool, contact)
+                else
+                    table.insert(pool, contact)
+                end
             end
         end
     end
 
     local remaining = math.max(0, maxActive - #selected)
     pickRandomContacts(pool, remaining, selected, seen)
+    remaining = math.max(0, maxActive - #selected)
+    pickRandomContacts(repeatedPool, remaining, selected, seen)
     return selected
 end
 
@@ -236,6 +252,7 @@ function TQ.Factions.ensureActiveContacts(player, force)
         return active
     end
 
+    local previousActive = active
     active = {
         version = ACTIVE_CONTACTS_VERSION,
         day = day,
@@ -253,7 +270,8 @@ function TQ.Factions.ensureActiveContacts(player, force)
             maxActiveMembers = 3,
         }
         local contacts = TQ.Factions.getContactsForFaction(factionId)
-        local selected = rollFactionContacts(faction, contacts, day, hour)
+        local previousIds = previousActive and previousActive.byFaction and previousActive.byFaction[factionId] or nil
+        local selected = rollFactionContacts(faction, contacts, day, hour, previousIds)
         active.byFaction[factionId] = selected
 
         for _, contactId in ipairs(selected) do

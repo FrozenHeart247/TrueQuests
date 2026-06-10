@@ -69,6 +69,98 @@ TQ.registerDialogueBank("tq_independent_generic", {
     },
 })
 
+TQ.registerDialogueTreeBank("tq_medics_tree", {
+    start = {
+        npc = {
+            "Clinic band is open. Tell me what you need.",
+            "You reached the field clinic. Keep the channel clear.",
+        },
+        options = {
+            { text = "Tell me about yourself.", next = "about" },
+            { text = "Is there anything happening lately?", next = "rumors" },
+            { text = "Anything you need done?", action = "show_jobs" },
+            { text = "Goodbye.", action = "close" },
+        },
+    },
+    about = {
+        npc = {
+            "We were medical staff, volunteers, and whoever could still hold pressure on a wound.",
+            "The clinic is not much. A few cots, a few shelves, and a radio that still reaches people.",
+        },
+        options = {
+            { text = "What does the clinic need most?", next = "needs" },
+            { text = "How are your people holding up?", next = "people" },
+            { text = "Back.", next = "start" },
+        },
+    },
+    needs = {
+        npc = "Clean cloth, disinfectant, painkillers. In that order. Everything else is comfort.",
+        options = {
+            { text = "Back.", next = "about" },
+        },
+    },
+    people = {
+        npc = "Tired. Too tired to waste supplies, not tired enough to stop answering calls.",
+        options = {
+            { text = "Back.", next = "about" },
+        },
+    },
+    rumors = {
+        npc = {
+            "Someone came in talking about smoke north of the highway. Could be survivors, could be trouble.",
+            "We heard gunfire after midnight. Short bursts. Organized, or scared. Hard to tell.",
+            "A runner said the clinic road was clear this morning. I would not trust that by dusk.",
+        },
+        options = {
+            { text = "Anything else?", next = "rumors" },
+            { text = "Back.", next = "start" },
+        },
+    },
+})
+
+TQ.registerDialogueTreeBank("tq_independent_tree", {
+    start = {
+        npc = {
+            "You got me. Say what you need to say.",
+            "Line is bad, but I hear you.",
+            "Make it quick. I do not like talking from one place too long.",
+        },
+        options = {
+            { text = "Tell me about yourself.", next = "about" },
+            { text = "Is there anything happening lately?", next = "rumors" },
+            { text = "Anything you need done?", action = "show_jobs" },
+            { text = "Goodbye.", action = "close" },
+        },
+    },
+    about = {
+        npc = {
+            "No badge, no crew, no speeches. I stay alive and pay back favors.",
+            "I used to know what my days were for. Now I count exits and canned food.",
+        },
+        options = {
+            { text = "You trust anyone out there?", next = "trust" },
+            { text = "Back.", next = "start" },
+        },
+    },
+    trust = {
+        npc = "Trust? No. But I keep a list of people who did not make things worse.",
+        options = {
+            { text = "Back.", next = "about" },
+        },
+    },
+    rumors = {
+        npc = {
+            "There is a dead crowd moving west. Slow, but too many to ignore.",
+            "Someone is stripping cars near the old road. If you hear engines, keep low.",
+            "I heard a generator last night. Then screaming. Then nothing.",
+        },
+        options = {
+            { text = "Anything else?", next = "rumors" },
+            { text = "Back.", next = "start" },
+        },
+    },
+})
+
 TQ.registerFaction({
     id = "medics",
     name = "Field Medics",
@@ -86,6 +178,7 @@ TQ.registerFaction({
         hard = 20,
     },
     dialogueBank = "tq_medics_generic",
+    dialogueTreeBank = "tq_medics_tree",
 })
 
 TQ.registerFaction({
@@ -105,6 +198,7 @@ TQ.registerFaction({
         hard = 10,
     },
     dialogueBank = "tq_independent_generic",
+    dialogueTreeBank = "tq_independent_tree",
 })
 
 TQ.registerRewardTable("tq_medics_easy", {
@@ -156,9 +250,20 @@ TQ.registerContact({
         easy = "tq_medics_doctor_easy",
     },
     dialogueBank = "tq_medics_generic",
+    dialogueTreeBank = "tq_medics_tree",
     dialogue = {
-        greeting = "This is Cross. If you are healthy enough to walk, you are healthy enough to help.",
+        greeting = "This is Crowe. If you are healthy enough to walk, you are healthy enough to help.",
         about = "The clinic is small, loud, and still alive. That is enough for now.",
+    },
+    dialogueTree = {
+        about = {
+            npc = "Amelie Crowe. Doctor before, coordinator now. I miss when those were different jobs.",
+            options = {
+                { text = "What does the clinic need most?", next = "needs" },
+                { text = "How are your people holding up?", next = "people" },
+                { text = "Back.", next = "start" },
+            },
+        },
     },
 })
 
@@ -176,6 +281,7 @@ TQ.registerContact({
         easy = "tq_medics_nurse_easy",
     },
     dialogueBank = "tq_medics_generic",
+    dialogueTreeBank = "tq_medics_tree",
     dialogue = {
         greeting = "Mara here. If you found clean cloth, I am interested.",
         work = "Bandages, wipes, anything that keeps a wound from turning ugly.",
@@ -196,6 +302,7 @@ TQ.registerContact({
         easy = "tq_medics_paramedic_easy",
     },
     dialogueBank = "tq_medics_generic",
+    dialogueTreeBank = "tq_medics_tree",
     dialogue = {
         greeting = "Hale on the ambulance set. No ambulance left, but the radio still works.",
         about = "I used to drive people out of trouble. Now I mostly ask strangers for supplies.",
@@ -216,6 +323,7 @@ TQ.registerContact({
         easy = "tq_independent_easy",
     },
     dialogueBank = "tq_independent_generic",
+    dialogueTreeBank = "tq_independent_tree",
 })
 
 TQ.registerContact({
@@ -232,6 +340,7 @@ TQ.registerContact({
         easy = "tq_independent_easy",
     },
     dialogueBank = "tq_independent_generic",
+    dialogueTreeBank = "tq_independent_tree",
 })
 
 TQ.registerContact({
@@ -248,6 +357,7 @@ TQ.registerContact({
         easy = "tq_independent_easy",
     },
     dialogueBank = "tq_independent_generic",
+    dialogueTreeBank = "tq_independent_tree",
 })
 
 TQ.registerQuestTemplate({
@@ -258,6 +368,7 @@ TQ.registerQuestTemplate({
     contact = "dr_amelie_crowe",
     factionId = "medics",
     unique = true,
+    repeatable = true,
     tags = { "medical", "delivery" },
     objectives = {
         { type = "item", item = "Base.Bandage", count = { min = 4, max = 7 }, label = "Clean bandages" },
@@ -276,6 +387,7 @@ TQ.registerQuestTemplate({
     contact = "nurse_mara_voss",
     factionId = "medics",
     unique = true,
+    repeatable = true,
     tags = { "medical", "delivery" },
     objectives = {
         { type = "item", item = "Base.AlcoholWipes", count = { min = 2, max = 5 }, label = "Alcohol wipes" },
@@ -294,6 +406,7 @@ TQ.registerQuestTemplate({
     contact = "owen_hale",
     factionId = "medics",
     unique = true,
+    repeatable = true,
     tags = { "medical", "delivery" },
     objectives = {
         { type = "item", item = "Base.Pills", count = { min = 1, max = 2 }, label = "Pain medication" },
@@ -312,6 +425,7 @@ TQ.registerQuestTemplate({
     contact = "marlow_relay",
     factionId = "independent",
     unique = true,
+    repeatable = true,
     tags = { "supplies", "delivery" },
     objectives = {
         { type = "item", item = "Base.Nails", count = { min = 20, max = 40 }, label = "Nails" },
@@ -330,6 +444,7 @@ TQ.registerQuestTemplate({
     contact = "tess_roofline",
     factionId = "independent",
     unique = true,
+    repeatable = true,
     tags = { "survival", "delivery" },
     objectives = {
         { type = "item", item = "Base.Sheet", count = { min = 2, max = 4 }, label = "Spare sheets" },
@@ -348,6 +463,7 @@ TQ.registerQuestTemplate({
     contact = "bradley_static",
     factionId = "independent",
     unique = true,
+    repeatable = true,
     tags = { "survival", "delivery" },
     objectives = {
         { type = "item", item = "Base.WaterBottle", count = 1, label = "Sealed water bottle" },
