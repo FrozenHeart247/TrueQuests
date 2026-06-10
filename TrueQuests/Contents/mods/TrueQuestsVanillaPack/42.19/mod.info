@@ -1,0 +1,8 @@
+name=True Quests - Vanilla Pack
+id=TrueQuestsVanillaPack
+description=Starter content pack for True Quests Framework: survivor radio contacts, fetch jobs, and reward tables.
+require=\TrueQuestsFramework
+loadModAfter=\TrueQuestsFramework
+category=features
+version=0.1.0
+versionMin=42.19

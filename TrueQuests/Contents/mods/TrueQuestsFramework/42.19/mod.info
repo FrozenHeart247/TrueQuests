@@ -1,0 +1,6 @@
+name=True Quests Framework
+id=TrueQuestsFramework
+description=Reusable quest framework for Project Zomboid. Provides contacts, generated quest instances, objectives, dialogue hooks, reward choices, radio entry points, and save data.
+category=features
+version=0.1.0
+versionMin=42.19
