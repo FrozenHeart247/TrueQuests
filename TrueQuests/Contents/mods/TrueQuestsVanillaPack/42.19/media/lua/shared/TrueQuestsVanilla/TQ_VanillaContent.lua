@@ -69,6 +69,134 @@ TQ.registerDialogueBank("tq_independent_generic", {
     },
 })
 
+TQ.registerDialogueTopic({
+    id = "about",
+    text = "Tell me about yourself.",
+    lineKey = "about",
+    priority = 10,
+    children = {
+        {
+            id = "medics_needs",
+            factionId = "medics",
+            text = "What does the clinic need most?",
+            npc = "Clean cloth, disinfectant, painkillers. In that order. Everything else is comfort.",
+            priority = 10,
+        },
+        {
+            id = "medics_people",
+            factionId = "medics",
+            text = "How are your people holding up?",
+            npc = "Tired. Too tired to waste supplies, not tired enough to stop answering calls.",
+            priority = 20,
+        },
+        {
+            id = "independent_trust",
+            factionId = "independent",
+            text = "You trust anyone out there?",
+            npc = "Trust? No. But I keep a list of people who did not make things worse.",
+            priority = 10,
+        },
+    },
+})
+
+TQ.registerDialogueTopic({
+    id = "medics_rumors",
+    factionId = "medics",
+    text = "Is there anything happening lately?",
+    npc = {
+        "Someone came in talking about smoke north of the highway. Could be survivors, could be trouble.",
+        "We heard gunfire after midnight. Short bursts. Organized, or scared. Hard to tell.",
+        "A runner said the clinic road was clear this morning. I would not trust that by dusk.",
+    },
+    priority = 20,
+    children = {
+        {
+            id = "medics_rumors_more",
+            text = "Anything else?",
+            npc = {
+                "A scavenger mentioned fresh tire tracks near the old service road.",
+                "Two patients swear they heard a helicopter. I would not build a plan around it.",
+            },
+        },
+    },
+})
+
+TQ.registerDialogueTopic({
+    id = "independent_rumors",
+    factionId = "independent",
+    text = "Is there anything happening lately?",
+    npc = {
+        "There is a dead crowd moving west. Slow, but too many to ignore.",
+        "Someone is stripping cars near the old road. If you hear engines, keep low.",
+        "I heard a generator last night. Then screaming. Then nothing.",
+    },
+    priority = 20,
+    children = {
+        {
+            id = "independent_rumors_more",
+            text = "Anything else?",
+            npc = {
+                "A few people are marking doors with chalk. Could be warnings, could be claims.",
+                "Somebody keeps broadcasting numbers after midnight. No names, no context.",
+            },
+        },
+    },
+})
+
+TQ.registerDialogueTopic({
+    id = "amelie_before",
+    contactId = "dr_amelie_crowe",
+    parent = "about",
+    text = "What did you do before this?",
+    npc = "Hospital doctor. These days I mostly count bandages, argue with radios, and decide who can be moved.",
+    priority = 30,
+})
+
+TQ.registerDialogueTopic({
+    id = "mara_before",
+    contactId = "nurse_mara_voss",
+    parent = "about",
+    text = "How did you end up with the clinic?",
+    npc = "I followed a patient here and never found a better reason to leave.",
+    priority = 30,
+})
+
+TQ.registerDialogueTopic({
+    id = "owen_before",
+    contactId = "owen_hale",
+    parent = "about",
+    text = "You were a paramedic?",
+    npc = "Ambulance crew. The roads are worse now, but people still need someone willing to run toward noise.",
+    priority = 30,
+})
+
+TQ.registerDialogueTopic({
+    id = "marlow_angle",
+    contactId = "marlow_relay",
+    parent = "about",
+    text = "What do you actually trade?",
+    npc = "Routes, warnings, names of people who pay back favors. Sometimes nails. Depends on the day.",
+    priority = 30,
+})
+
+TQ.registerDialogueTopic({
+    id = "tess_angle",
+    contactId = "tess_roofline",
+    parent = "about",
+    text = "Why stay on the roofline?",
+    npc = "Height buys time. Time buys choices. Choices are about the only currency left.",
+    priority = 30,
+})
+
+TQ.registerDialogueTopic({
+    id = "bradley_angle",
+    contactId = "bradley_static",
+    parent = "about",
+    text = "Are you alone out there?",
+    npc = "Alone enough to answer for myself. Not alone enough to stop listening.",
+    priority = 30,
+})
+
 TQ.registerDialogueTreeBank("tq_medics_tree", {
     start = {
         npc = {

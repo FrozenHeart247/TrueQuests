@@ -359,18 +359,30 @@ function TQ_QuestBoardWindow:createChildren()
 
     self.optionButtons = {}
     for index = 1, 6 do
-        local optionIndex = index
-        local button = ISButton:new(self.optionsX, self.optionsY, 260, 28, "", self, function(target)
-            target:onDialogueOption(optionIndex)
-        end)
-        button:initialise()
-        TQ_UITheme.styleButton(button, "default")
-        self:addChild(button)
-        table.insert(self.optionButtons, button)
+        self:createOptionButton(index)
     end
 
     self:applyLayout()
     self:refreshData()
+end
+
+function TQ_QuestBoardWindow:createOptionButton(index)
+    local optionIndex = index
+    local button = ISButton:new(self.optionsX, self.optionsY, 260, 28, "", self, function(target)
+        target:onDialogueOption(optionIndex)
+    end)
+    button:initialise()
+    TQ_UITheme.styleButton(button, "default")
+    self:addChild(button)
+    table.insert(self.optionButtons, button)
+    return button
+end
+
+function TQ_QuestBoardWindow:ensureOptionButtons(count)
+    count = tonumber(count) or 0
+    while #self.optionButtons < count do
+        self:createOptionButton(#self.optionButtons + 1)
+    end
 end
 
 function TQ_QuestBoardWindow:applyLayout()
@@ -681,6 +693,11 @@ end
 function TQ_QuestBoardWindow:updateDialogueOptions()
     local inDialogue = self.mode == "dialogue"
     local options = inDialogue and self.dialogueOptions or {}
+    self:ensureOptionButtons(type(options) == "table" and #options or 0)
+
+    for index, button in ipairs(self.optionButtons or {}) do
+        setChildBounds(button, self.optionsX, self.optionsY + (index - 1) * 36, math.min(420, self.dialogueW - 24), 28)
+    end
 
     for index, button in ipairs(self.optionButtons or {}) do
         local option = options and options[index] or nil
