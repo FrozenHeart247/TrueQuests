@@ -1,0 +1,8 @@
+name=True Quests - NPC Bridge
+id=TrueQuestsNPCBridge
+description=Prototype bridge between True Quests and True NPC Framework. Adds physical static NPCs for starter quest contacts.
+require=\TrueNPCFramework,\TrueQuestsFramework,\TrueQuestsVanillaPack
+loadModAfter=\TrueNPCFramework,\TrueQuestsFramework,\TrueQuestsVanillaPack
+category=features
+version=0.1.0
+versionMin=42.19

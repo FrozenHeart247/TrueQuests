@@ -1,0 +1,6 @@
+name=True NPC Framework
+id=TrueNPCFramework
+description=Reusable NPC presence framework for Project Zomboid. Provides static quest NPC spawning, world state, behavior hooks, and interaction adapters for other mods.
+category=features
+version=0.1.0
+versionMin=42.19

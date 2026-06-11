@@ -1,0 +1,5 @@
+require "TrueNPC/TN_Core"
+require "TrueNPC/TN_Registry"
+require "TrueNPC/TN_Save"
+require "TrueNPC/TN_Appearance"
+require "TrueNPC/TN_Behaviors"
