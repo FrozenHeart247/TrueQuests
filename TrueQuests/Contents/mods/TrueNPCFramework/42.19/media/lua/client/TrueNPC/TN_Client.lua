@@ -10,6 +10,7 @@ local FORCED_SPAWN_CHECK_DELAY = 15
 local BEHAVIOR_INTERVAL = 5
 local CACHE_TTL = 30
 local SPAWN_REQUEST_COOLDOWN = 300
+local RESTORE_ANCHOR_TOLERANCE = 1.35
 
 local frameTick = 0
 local behaviorTick = 0
@@ -57,6 +58,48 @@ local function markerMatchesZombie(state, zombie)
     return false
 end
 
+local function getSpawnKey(spawn)
+    if type(spawn) ~= "table" then
+        return nil
+    end
+
+    return tostring(math.floor(tonumber(spawn.x) or 0))
+        .. ":" .. tostring(math.floor(tonumber(spawn.y) or 0))
+        .. ":" .. tostring(math.floor(tonumber(spawn.z) or 0))
+end
+
+local function getSpawnCenter(spawn)
+    if type(spawn) ~= "table" then
+        return nil, nil, nil
+    end
+
+    local x = tonumber(spawn.x)
+    local y = tonumber(spawn.y)
+    local z = tonumber(spawn.z) or 0
+    if not x or not y then
+        return nil, nil, nil
+    end
+
+    return x + 0.5, y + 0.5, z
+end
+
+local function isZombieNearSpawnAnchor(zombie, spawn, tolerance)
+    local sx, sy, sz = getSpawnCenter(spawn)
+    if not zombie or not sx or not sy then
+        return false
+    end
+
+    local zz = zombie.getZ and zombie:getZ() or sz
+    if math.floor(zz or 0) ~= math.floor(sz or 0) then
+        return false
+    end
+
+    local zx = zombie.getX and zombie:getX() or sx
+    local zy = zombie.getY and zombie:getY() or sy
+    tolerance = tonumber(tolerance) or RESTORE_ANCHOR_TOLERANCE
+    return TN.distanceSq(zx, zy, sx, sy) <= tolerance * tolerance
+end
+
 local function markZombieAsNPC(zombie, npc)
     if not zombie or not npc or not zombie.getModData then
         return
@@ -70,6 +113,7 @@ local function markZombieAsNPC(zombie, npc)
         spawnX = spawn and spawn.x or nil,
         spawnY = spawn and spawn.y or nil,
         spawnZ = spawn and spawn.z or nil,
+        spawnKey = getSpawnKey(spawn),
     }
     modData.TrueNPCId = tostring(npc.id)
 
@@ -89,7 +133,7 @@ local function restoreNPCMarker(zombie)
     for savedNpcId, state in pairs(data.npcs or {}) do
         if state.status == "spawned" and markerMatchesZombie(state, zombie) then
             local npc = TN.getNPC(savedNpcId)
-            if npc then
+            if npc and isZombieNearSpawnAnchor(zombie, TN.getNPCSpawn(npc), RESTORE_ANCHOR_TOLERANCE) then
                 markZombieAsNPC(zombie, npc)
                 TN.Appearance.apply(zombie, npc, { capture = false })
                 TN.Behaviors.update(npc, zombie, {
@@ -464,6 +508,12 @@ function TN.Client.talkToNPC(player, zombie)
         reason = "player_interaction",
     })
 
+    TN.Brain.tick(npc, zombie, {
+        player = player,
+        source = "client_talk_start",
+        actionId = "talking",
+    })
+
     local interaction = npc.interaction or {}
     local interactionType = tostring(interaction.type or npc.interactionType or "default")
     local handler = TN.Client.interactionHandlers[interactionType]
@@ -498,8 +548,30 @@ local function onPreFillWorldObjectContextMenu(playerNum, context, worldObjects)
     end
 end
 
+local function onZombieUpdate(zombie)
+    local npcId = TN.getZombieNPCId(zombie)
+    if not npcId then
+        return
+    end
+
+    local npc = TN.getNPC(npcId)
+    if not npc then
+        return
+    end
+
+    local player = getSpecificPlayer and getSpecificPlayer(0) or getPlayer and getPlayer() or nil
+    TN.Brain.tick(npc, zombie, {
+        player = player,
+        source = "client_zombie_update",
+    })
+end
+
 if Events and Events.OnPlayerUpdate then
     Events.OnPlayerUpdate.Add(onPlayerUpdate)
+end
+
+if Events and Events.OnZombieUpdate then
+    Events.OnZombieUpdate.Add(onZombieUpdate)
 end
 
 if Events and Events.LoadGridsquare then

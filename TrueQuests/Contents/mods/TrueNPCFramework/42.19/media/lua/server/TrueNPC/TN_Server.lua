@@ -5,6 +5,9 @@ local TN = TrueNPC
 TN.Server = TN.Server or {}
 TN.Server.Commands = TN.Server.Commands or {}
 
+local RESTORE_ANCHOR_TOLERANCE = 1.35
+local EXISTING_ANCHOR_TOLERANCE = 0.95
+
 local function getCellSafe()
     if getCell then
         return getCell()
@@ -38,6 +41,70 @@ local function markerMatchesZombie(state, zombie)
     return false
 end
 
+local function getSpawnKey(spawn)
+    if type(spawn) ~= "table" then
+        return nil
+    end
+
+    return tostring(math.floor(tonumber(spawn.x) or 0))
+        .. ":" .. tostring(math.floor(tonumber(spawn.y) or 0))
+        .. ":" .. tostring(math.floor(tonumber(spawn.z) or 0))
+end
+
+local function getSpawnCenter(spawn)
+    if type(spawn) ~= "table" then
+        return nil, nil, nil
+    end
+
+    local x = tonumber(spawn.x)
+    local y = tonumber(spawn.y)
+    local z = tonumber(spawn.z) or 0
+    if not x or not y then
+        return nil, nil, nil
+    end
+
+    return x + 0.5, y + 0.5, z
+end
+
+local function distanceToSpawnCenterSq(zombie, spawn)
+    local sx, sy = getSpawnCenter(spawn)
+    if not zombie or not sx or not sy then
+        return 0
+    end
+
+    local zx = zombie.getX and zombie:getX() or sx
+    local zy = zombie.getY and zombie:getY() or sy
+    return TN.distanceSq(zx, zy, sx, sy)
+end
+
+local function isZombieNearSpawnAnchor(zombie, spawn, tolerance)
+    local sx, sy, sz = getSpawnCenter(spawn)
+    if not zombie or not sx or not sy then
+        return false
+    end
+
+    local zz = zombie.getZ and zombie:getZ() or sz
+    if math.floor(zz or 0) ~= math.floor(sz or 0) then
+        return false
+    end
+
+    tolerance = tonumber(tolerance) or RESTORE_ANCHOR_TOLERANCE
+    return distanceToSpawnCenterSq(zombie, spawn) <= tolerance * tolerance
+end
+
+local function placeZombieAtSpawn(zombie, spawn)
+    local sx, sy, sz = getSpawnCenter(spawn)
+    if zombie and zombie.setPosition and sx and sy then
+        zombie:setPosition(sx, sy, sz or 0)
+        return true
+    end
+    return false
+end
+
+local function isStaticNPC(npc)
+    return tostring((npc and npc.behavior and npc.behavior.type) or "static") == "static"
+end
+
 local function markZombieAsNPC(zombie, npc, spawn)
     if not zombie or not npc or not zombie.getModData then
         return
@@ -51,6 +118,7 @@ local function markZombieAsNPC(zombie, npc, spawn)
         spawnX = spawn and spawn.x or nil,
         spawnY = spawn and spawn.y or nil,
         spawnZ = spawn and spawn.z or nil,
+        spawnKey = getSpawnKey(spawn),
     }
     modData.TrueNPCId = tostring(npc.id)
 
@@ -74,7 +142,7 @@ local function restoreNPCMarker(zombie, expectedNpcId)
             and state.status == "spawned"
             and markerMatchesZombie(state, zombie) then
             local npc = TN.getNPC(savedNpcId)
-            if npc then
+            if npc and isZombieNearSpawnAnchor(zombie, TN.getNPCSpawn(npc), RESTORE_ANCHOR_TOLERANCE) then
                 markZombieAsNPC(zombie, npc)
                 TN.Appearance.apply(zombie, npc)
                 TN.Behaviors.update(npc, zombie, { source = "server_restore" })
@@ -148,12 +216,6 @@ local function getZombieIdentity(zombie)
     return tostring(zombie)
 end
 
-local function distanceToSpawnSq(zombie, spawn)
-    local zx = zombie and zombie.getX and zombie:getX() or spawn.x
-    local zy = zombie and zombie.getY and zombie:getY() or spawn.y
-    return TN.distanceSq(zx, zy, spawn.x, spawn.y)
-end
-
 local function collectNPCZombiesNearSpawn(npc)
     local spawn = TN.getNPCSpawn(npc)
     local cell = getCellSafe()
@@ -211,7 +273,7 @@ local function collectNPCZombiesNearSpawn(npc)
     end
 
     table.sort(result, function(a, b)
-        return distanceToSpawnSq(a, spawn) < distanceToSpawnSq(b, spawn)
+        return distanceToSpawnCenterSq(a, spawn) < distanceToSpawnCenterSq(b, spawn)
     end)
 
     return result
@@ -241,8 +303,8 @@ local function prepareZombie(zombie, npc, spawn, options)
     options = type(options) == "table" and options or {}
     local shouldPlace = options.place ~= false
 
-    if shouldPlace and zombie.setPosition and spawn then
-        zombie:setPosition((tonumber(spawn.x) or 0) + 0.5, (tonumber(spawn.y) or 0) + 0.5, tonumber(spawn.z) or 0)
+    if shouldPlace and spawn then
+        placeZombieAtSpawn(zombie, spawn)
     end
 
     markZombieAsNPC(zombie, npc, spawn)
@@ -253,6 +315,10 @@ local function prepareZombie(zombie, npc, spawn, options)
     end
 
     TN.Behaviors.update(npc, zombie, { source = "server_spawn" })
+
+    if zombie.getModData then
+        zombie:getModData().TrueNPCPrepared = true
+    end
 end
 
 local function markSpawned(npc, zombie, spawn)
@@ -264,6 +330,7 @@ local function markSpawned(npc, zombie, spawn)
     state.x = spawn and spawn.x or nil
     state.y = spawn and spawn.y or nil
     state.z = spawn and spawn.z or nil
+    state.spawnKey = getSpawnKey(spawn)
     state.spawnedAt = TN.getWorldAgeHours()
     state.lastSeenAt = state.spawnedAt
 
@@ -285,6 +352,7 @@ local function markSeen(npc, zombie, spawn)
     state.x = spawn and spawn.x or nil
     state.y = spawn and spawn.y or nil
     state.z = spawn and spawn.z or nil
+    state.spawnKey = getSpawnKey(spawn)
     state.spawnedAt = tonumber(state.spawnedAt) or now
     state.lastSeenAt = now
     TN.Save.transmit()
@@ -310,7 +378,17 @@ local function spawnZombieForNPC(player, npc)
     end
 
     if existing then
-        prepareZombie(existing, npc, spawn, { place = false })
+        local modData = existing.getModData and existing:getModData() or nil
+        local needsAnchor = isStaticNPC(npc) and not isZombieNearSpawnAnchor(existing, spawn, EXISTING_ANCHOR_TOLERANCE)
+        if not modData or modData.TrueNPCPrepared ~= true then
+            prepareZombie(existing, npc, spawn, { place = needsAnchor })
+        else
+            markZombieAsNPC(existing, npc, spawn)
+            if needsAnchor then
+                placeZombieAtSpawn(existing, spawn)
+                TN.Behaviors.update(npc, existing, { source = "server_reanchor" })
+            end
+        end
         markSeen(npc, existing, spawn)
         return existing, "already_spawned"
     end

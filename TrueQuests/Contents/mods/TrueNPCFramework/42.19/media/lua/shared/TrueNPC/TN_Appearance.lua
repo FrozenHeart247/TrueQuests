@@ -188,6 +188,8 @@ function TN.Appearance.buildProfile(npc, state)
     profile.hairColor = resolveColor(firstNonNil(profile.hairColor, appearance.hairColor), (math.floor(seed / 11) % #HAIR_COLORS) + 1)
     profile.clothing = copyTable(firstNonNil(profile.clothing, appearance.clothing))
     profile.tints = copyTable(firstNonNil(profile.tints, appearance.tints))
+    profile.textureChoices = copyTable(firstNonNil(profile.textureChoices, appearance.textureChoices))
+    profile.seed = seed
     profile.voicePrefix = tostring(firstNonNil(profile.voicePrefix, appearance.voicePrefix, "Bandit"))
     profile.carrierOutfit = tostring(firstNonNil(profile.carrierOutfit, appearance.carrierOutfit, "Naked1"))
     profile.health = tonumber(firstNonNil(profile.health, appearance.health)) or 5
@@ -390,6 +392,18 @@ local function getItemTint(profile, itemType, entry)
     return nil
 end
 
+local function getItemTextureChoice(profile, itemType, entry)
+    if type(entry) == "table" and entry.textureChoice ~= nil then
+        return tonumber(entry.textureChoice)
+    end
+
+    if type(profile.textureChoices) == "table" and profile.textureChoices[itemType] ~= nil then
+        return tonumber(profile.textureChoices[itemType])
+    end
+
+    return nil
+end
+
 local function addItemVisual(character, visuals, profile, entry)
     local itemType = entry
     if type(entry) == "table" then
@@ -408,18 +422,7 @@ local function addItemVisual(character, visuals, profile, entry)
     end
 
     local itemVisual = nil
-    local fromItemVisual = false
-    if item.getVisual then
-        local ok, visual = pcall(function()
-            return item:getVisual()
-        end)
-        if ok and visual then
-            itemVisual = visual
-            fromItemVisual = true
-        end
-    end
-
-    if not itemVisual and ItemVisual.new then
+    if ItemVisual.new then
         itemVisual = ItemVisual.new()
     end
 
@@ -432,7 +435,7 @@ local function addItemVisual(character, visuals, profile, entry)
             itemVisual:setItemType(itemType)
         end)
     end
-    if itemVisual.setClothingItemName and not fromItemVisual then
+    if itemVisual.setClothingItemName then
         pcall(function()
             itemVisual:setClothingItemName(itemType)
         end)
@@ -442,6 +445,13 @@ local function addItemVisual(character, visuals, profile, entry)
     if tint and itemVisual.setTint then
         pcall(function()
             itemVisual:setTint(tint)
+        end)
+    end
+
+    local textureChoice = getItemTextureChoice(profile, itemType, entry)
+    if textureChoice and itemVisual.setTextureChoice then
+        pcall(function()
+            itemVisual:setTextureChoice(math.max(0, math.floor(textureChoice)))
         end)
     end
 
@@ -518,6 +528,39 @@ local function resetModel(character)
     callIfExists(character, "resetEquippedHandsModels")
 end
 
+local function colorSignature(color)
+    if type(color) ~= "table" then
+        return ""
+    end
+    return tostring(color.r or color[1] or 0)
+        .. "," .. tostring(color.g or color[2] or 0)
+        .. "," .. tostring(color.b or color[3] or 0)
+        .. "," .. tostring(color.a or color[4] or 1)
+end
+
+local function profileSignature(profile)
+    local parts = {
+        tostring(profile.female == true),
+        tostring(profile.skinTexture or ""),
+        tostring(profile.hair or ""),
+        tostring(profile.beard or ""),
+        colorSignature(profile.hairColor),
+    }
+
+    for _, entry in ipairs(profile.clothing or {}) do
+        local itemType = entry
+        if type(entry) == "table" then
+            itemType = entry.type or entry.item or entry.itemType
+        end
+        itemType = normalizeItemType(itemType) or ""
+        table.insert(parts, tostring(itemType))
+        table.insert(parts, colorSignature(getItemTint(profile, itemType, entry)))
+        table.insert(parts, tostring(getItemTextureChoice(profile, itemType, entry) or ""))
+    end
+
+    return table.concat(parts, "|")
+end
+
 function TN.Appearance.apply(character, npc, options)
     if not character or not npc then
         return false
@@ -530,19 +573,28 @@ function TN.Appearance.apply(character, npc, options)
         return false
     end
 
+    local signature = profileSignature(profile)
+    local modData = character.getModData and character:getModData() or nil
+    if options.force ~= true
+        and modData
+        and type(modData.TrueNPCAppearance) == "table"
+        and modData.TrueNPCAppearance.signature == signature then
+        return true
+    end
+
     applyFemale(character, profile.female)
     applyHumanVisual(character, profile)
     applyClothingProfile(character, profile)
     applyVoice(character, profile)
 
-    if character.getModData then
-        local modData = character:getModData()
+    if modData then
         modData.TrueNPCAppearance = {
             female = profile.female == true,
             skinTexture = profile.skinTexture,
             hair = profile.hair,
             beard = profile.beard,
             clothing = copyTable(profile.clothing),
+            signature = signature,
             locked = true,
         }
     end

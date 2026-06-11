@@ -23,6 +23,11 @@ end
 local function staticBehavior(maxDrift)
     return {
         type = "static",
+        brain = {
+            stationary = true,
+            walkType = "Walk",
+            movementSpeed = 0.7,
+        },
         facePlayer = false,
         maxDrift = maxDrift or 2,
         teleportBack = false,
@@ -55,7 +60,7 @@ registerQuestNPC({
     contactId = "dr_amelie_crowe",
     factionId = "medics",
     name = "Amelie Crowe",
-    spawn = { x = 10628, y = 9514, z = 0, radius = 3, spawnRadius = 85, despawnRadius = 120 },
+    spawn = { x = 10881, y = 10026, z = 1, radius = 3, spawnRadius = 85, despawnRadius = 120 },
     appearance = npcAppearance({
         female = true,
         skin = 2,
@@ -68,6 +73,12 @@ registerQuestNPC({
             "Base.Gloves_Surgical",
             "Base.Shoes_Black",
         },
+        tints = {
+            ["Base.Trousers_WhiteTINT"] = { r = 0.92, g = 0.92, b = 0.86 },
+        },
+        textureChoices = {
+            ["Base.Trousers_WhiteTINT"] = 0,
+        },
     }),
 })
 
@@ -76,7 +87,7 @@ registerQuestNPC({
     contactId = "nurse_mara_voss",
     factionId = "medics",
     name = "Mara Voss",
-    spawn = { x = 10630, y = 9514, z = 0, radius = 3, spawnRadius = 85, despawnRadius = 120 },
+    spawn = { x = 10865, y = 10035, z = 0, radius = 3, spawnRadius = 85, despawnRadius = 120 },
     appearance = npcAppearance({
         female = true,
         skin = 1,
@@ -92,6 +103,13 @@ registerQuestNPC({
         tints = {
             ["Base.Shirt_Scrubs"] = { r = 0.22, g = 0.52, b = 0.58 },
             ["Base.Trousers_Scrubs"] = { r = 0.22, g = 0.52, b = 0.58 },
+            ["Base.Shoes_TrainerTINT"] = { r = 0.08, g = 0.10, b = 0.12 },
+        },
+        textureChoices = {
+            ["Base.Shirt_Scrubs"] = 0,
+            ["Base.Trousers_Scrubs"] = 0,
+            ["Base.Hat_SurgicalCap"] = 0,
+            ["Base.Shoes_TrainerTINT"] = 0,
         },
     }),
 })
@@ -101,7 +119,7 @@ registerQuestNPC({
     contactId = "owen_hale",
     factionId = "medics",
     name = "Owen Hale",
-    spawn = { x = 10626, y = 9516, z = 0, radius = 3, spawnRadius = 85, despawnRadius = 120 },
+    spawn = { x = 10862, y = 10038, z = 0, radius = 3, spawnRadius = 85, despawnRadius = 120 },
     appearance = npcAppearance({
         female = false,
         skin = 3,
@@ -117,6 +135,9 @@ registerQuestNPC({
         },
         tints = {
             ["Base.Tshirt_WhiteTINT"] = { r = 0.88, g = 0.88, b = 0.82 },
+        },
+        textureChoices = {
+            ["Base.Tshirt_WhiteTINT"] = 0,
         },
     }),
 })
@@ -139,6 +160,12 @@ registerQuestNPC({
             "Base.Trousers_Denim",
             "Base.Shoes_Black",
         },
+        tints = {
+            ["Base.Tshirt_DefaultTEXTURE_TINT"] = { r = 0.55, g = 0.50, b = 0.42 },
+        },
+        textureChoices = {
+            ["Base.Tshirt_DefaultTEXTURE_TINT"] = 0,
+        },
     }),
 })
 
@@ -159,6 +186,16 @@ registerQuestNPC({
             "Base.TrousersMesh_DenimLight",
             "Base.Shoes_TrainerTINT",
         },
+        tints = {
+            ["Base.Tshirt_WhiteTINT"] = { r = 0.72, g = 0.70, b = 0.63 },
+            ["Base.HoodieDOWN_WhiteTINT"] = { r = 0.24, g = 0.31, b = 0.36 },
+            ["Base.Shoes_TrainerTINT"] = { r = 0.16, g = 0.14, b = 0.14 },
+        },
+        textureChoices = {
+            ["Base.Tshirt_WhiteTINT"] = 0,
+            ["Base.HoodieDOWN_WhiteTINT"] = 0,
+            ["Base.Shoes_TrainerTINT"] = 0,
+        },
     }),
 })
 
@@ -178,7 +215,7 @@ registerQuestNPC({
             "Base.Shirt_Lumberjack",
             "Base.Jacket_Black",
             "Base.Trousers",
-            "Base.Shoes_Random",
+            "Base.Shoes_Black",
         },
     }),
 })

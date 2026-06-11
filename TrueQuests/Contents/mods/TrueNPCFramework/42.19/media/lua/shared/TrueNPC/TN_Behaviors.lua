@@ -1,6 +1,7 @@
 require "TrueNPC/TN_Core"
 require "TrueNPC/TN_Registry"
 require "TrueNPC/TN_Save"
+require "TrueNPC/TN_Brain"
 
 local TN = TrueNPC
 
@@ -88,40 +89,63 @@ local function getZombieSessionKey(zombie, npc)
     return "pos:" .. tostring(npc and npc.id or "unknown") .. ":" .. tostring(math.floor(x * 10)) .. ":" .. tostring(math.floor(y * 10)) .. ":" .. tostring(math.floor(z))
 end
 
+local function isBadStaticAction(action)
+    return action == "sitonground"
+        or action == "onground"
+        or action == "getup"
+        or action == "getup-fromsitting"
+        or action == "getup-fromonback"
+        or action == "getup-fromonfront"
+        or action == "turnalerted"
+        or action == "lunge"
+        or action == "pathfind"
+        or action == "walktoward"
+        or action == "walktoward-network"
+end
+
+local function getActionStateName(zombie)
+    if zombie and zombie.getActionStateName then
+        local ok, result = pcall(function()
+            return zombie:getActionStateName()
+        end)
+        if ok and result then
+            return tostring(result)
+        end
+    end
+    return nil
+end
+
 local function normalizeZombieState(zombie)
     if not zombie then
         return
     end
 
-    local action = nil
-    if zombie.getActionStateName then
-        local ok, result = pcall(function()
-            return zombie:getActionStateName()
-        end)
-        if ok and result then
-            action = tostring(result)
-        end
-    end
+    local action = getActionStateName(zombie)
 
-    if action and (action == "sitonground"
-        or action == "onground"
-        or action == "getup"
-        or action == "getup-fromsitting"
-        or action == "getup-fromonback"
-        or action == "getup-fromonfront") then
+    if action and isBadStaticAction(action) then
         if zombie.changeState and ZombieIdleState and ZombieIdleState.instance then
             pcall(function()
                 zombie:changeState(ZombieIdleState.instance())
             end)
         end
+        callIfExists(zombie, "setActionStateName", "idle")
+        callIfExists(zombie, "setTurnDelta", 0)
     end
 
+    callIfExists(zombie, "setTargetSeenTime", 0)
+    callIfExists(zombie, "setTurnAlertedValues", -5, 5)
     callIfExists(zombie, "setCrawler", false)
     callIfExists(zombie, "setFakeDead", false)
     callIfExists(zombie, "setFallOnFront", false)
     callIfExists(zombie, "setPrimaryHandItem", nil)
     callIfExists(zombie, "setSecondaryHandItem", nil)
     callIfExists(zombie, "resetEquippedHandsModels")
+    callIfExists(zombie, "clearAttachedItems")
+
+    if zombie.getEmitter then
+        local emitter = zombie:getEmitter()
+        callIfExists(emitter, "stopAll")
+    end
 end
 
 local function freezeZombie(zombie, npc)
@@ -135,7 +159,17 @@ local function freezeZombie(zombie, npc)
     end
 
     local sessionKey = getZombieSessionKey(zombie, npc)
-    local prepared = staticPrepared[sessionKey] == true
+    local action = getActionStateName(zombie)
+    local needsStateReset = action and isBadStaticAction(action)
+    local prepared = staticPrepared[sessionKey] == true or (modData and modData.TrueNPCBehaviorPrepared == true)
+
+    if prepared and not needsStateReset then
+        callIfExists(zombie, "setUseless", true)
+        callIfExists(zombie, "setIgnoreMovement", true)
+        callIfExists(zombie, "setTarget", nil)
+        callIfExists(zombie, "clearAggroList")
+        return
+    end
 
     normalizeZombieState(zombie)
 
@@ -155,6 +189,8 @@ local function freezeZombie(zombie, npc)
         zombie:setVariable("RunSpeed", 0.65)
         zombie:setVariable("WalkSpeed", 1.0)
         zombie:setVariable("MovementSpeed", 0.7)
+        zombie:setVariable("CharacterMovementSpeed", "Walk")
+        zombie:setVariable("TrueNPCWalkType", "Walk")
         zombie:setVariable("ZombieHitReaction", "Chainsaw")
     end
 
@@ -163,6 +199,9 @@ local function freezeZombie(zombie, npc)
         zombie:setVariable("NoLungeAttack", true)
         zombie:setVariable("ZombieBiteDone", true)
         staticPrepared[sessionKey] = true
+        if modData then
+            modData.TrueNPCBehaviorPrepared = true
+        end
     end
 end
 
@@ -193,7 +232,7 @@ function staticBehavior.update(npc, zombie, context)
         return false
     end
 
-    freezeZombie(zombie, npc)
+    TN.Brain.tick(npc, zombie, context or {})
 
     local spawn = TN.getNPCSpawn(npc)
     local maxDrift = tonumber(npc.behavior and npc.behavior.maxDrift) or tonumber(npc.maxDrift) or 3
