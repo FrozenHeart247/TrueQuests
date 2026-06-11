@@ -34,6 +34,39 @@ local function staticBehavior(maxDrift)
     }
 end
 
+local INDEPENDENT_SPAWN_POINTS = {
+    { id = "crossroads_clinic", name = "Crossroads Camp", x = 10748, y = 10271, z = 0 },
+    { id = "northern_overlook", name = "Northern Overlook", x = 11604, y = 6820, z = 1 },
+    { id = "southern_hideout", name = "Southern Hideout", x = 8450, y = 11736, z = 0 },
+    { id = "warehouse_cut", name = "Warehouse Cut", x = 9092, y = 9313, z = 0 },
+    { id = "western_watch", name = "Western Watch", x = 1534, y = 6507, z = 0 },
+    { id = "high_roof", name = "High Roof", x = 6951, y = 5570, z = 1 },
+    { id = "riverbend_stop", name = "Riverbend Stop", x = 2426, y = 13710, z = 0 },
+    { id = "deep_south_cache", name = "Deep South Cache", x = 3537, y = 11048, z = 0 },
+    { id = "old_service_road", name = "Old Service Road", x = 9667, y = 8774, z = 0 },
+}
+
+local function independentSpawnPoints(offsetX, offsetY)
+    local result = {}
+    offsetX = tonumber(offsetX) or 0
+    offsetY = tonumber(offsetY) or 0
+
+    for _, point in ipairs(INDEPENDENT_SPAWN_POINTS) do
+        table.insert(result, {
+            id = point.id,
+            name = point.name,
+            x = point.x + offsetX,
+            y = point.y + offsetY,
+            z = point.z or 0,
+            radius = 3,
+            spawnRadius = 85,
+            despawnRadius = 120,
+        })
+    end
+
+    return result
+end
+
 local function npcAppearance(profile)
     profile = type(profile) == "table" and profile or {}
     profile.carrierOutfit = profile.carrierOutfit or "Naked1"
@@ -147,7 +180,8 @@ registerQuestNPC({
     contactId = "marlow_relay",
     factionId = "independent",
     name = "Marlow",
-    spawn = { x = 10620, y = 9520, z = 0, radius = 3, spawnRadius = 85, despawnRadius = 120 },
+    spawnSelection = "random",
+    spawnPoints = independentSpawnPoints(0, 0),
     appearance = npcAppearance({
         female = false,
         skin = 2,
@@ -174,7 +208,8 @@ registerQuestNPC({
     contactId = "tess_roofline",
     factionId = "independent",
     name = "Tess",
-    spawn = { x = 10623, y = 9522, z = 0, radius = 3, spawnRadius = 85, despawnRadius = 120 },
+    spawnSelection = "random",
+    spawnPoints = independentSpawnPoints(3, 2),
     appearance = npcAppearance({
         female = true,
         skin = 3,
@@ -204,7 +239,8 @@ registerQuestNPC({
     contactId = "bradley_static",
     factionId = "independent",
     name = "Bradley",
-    spawn = { x = 10618, y = 9523, z = 0, radius = 3, spawnRadius = 85, despawnRadius = 120 },
+    spawnSelection = "random",
+    spawnPoints = independentSpawnPoints(-2, 3),
     appearance = npcAppearance({
         female = false,
         skin = 1,

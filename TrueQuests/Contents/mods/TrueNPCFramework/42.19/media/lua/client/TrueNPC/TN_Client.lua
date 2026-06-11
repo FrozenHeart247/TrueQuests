@@ -299,18 +299,23 @@ function TN.Client.findZombieByNPCId(npcId)
     return cache.byNpcId[tostring(npcId or "")]
 end
 
-local function requestSpawn(player, npc)
+local function requestSpawn(player, npc, spawn)
     if not player or not npc then
         return
     end
 
-    local lastRequestTick = spawnRequestTicks[npc.id] or -SPAWN_REQUEST_COOLDOWN
+    local spawnId = spawn and spawn.id or nil
+    local requestKey = tostring(npc.id) .. ":" .. tostring(spawnId or "default")
+    local lastRequestTick = spawnRequestTicks[requestKey] or -SPAWN_REQUEST_COOLDOWN
     if frameTick - lastRequestTick < SPAWN_REQUEST_COOLDOWN then
         return
     end
 
-    spawnRequestTicks[npc.id] = frameTick
-    sendClientCommand(player, "TrueNPC", "RequestSpawn", { npcId = npc.id })
+    spawnRequestTicks[requestKey] = frameTick
+    sendClientCommand(player, "TrueNPC", "RequestSpawn", {
+        npcId = npc.id,
+        spawnId = spawnId,
+    })
 end
 
 local function requestDespawn(player, npc)
@@ -332,12 +337,16 @@ function TN.Client.updateNearbyNPCs(player)
         if spawn then
             local zombie = cache.byNpcId[npc.id]
             local enabled = TN.Registry.isNPCEnabled(npc, { player = player, source = "client_update" })
-            local nearSpawn = TN.isPlayerNear(player, spawn, tonumber(spawn.spawnRadius) or 90)
-            local farFromSpawn = not TN.isPlayerNear(player, spawn, tonumber(spawn.despawnRadius) or 120)
-
-            if enabled and nearSpawn then
-                requestSpawn(player, npc)
+            for _, candidate in ipairs(TN.getNPCSpawnSearchCandidates(npc)) do
+                if TN.isPlayerNear(player, candidate, tonumber(candidate.spawnRadius) or 90) then
+                    if enabled then
+                        requestSpawn(player, npc, candidate)
+                    end
+                    break
+                end
             end
+
+            local farFromSpawn = not TN.isPlayerNear(player, spawn, tonumber(spawn.despawnRadius) or 120)
 
             if (not enabled or farFromSpawn) and zombie then
                 requestDespawn(player, npc)

@@ -325,6 +325,9 @@ local function markSpawned(npc, zombie, spawn)
     local state = TN.Save.ensureNPCState(npc.id)
     state.status = "spawned"
     state.behaviorState = tostring(state.behaviorState or "idle")
+    state.spawnPointId = spawn and spawn.id and tostring(spawn.id) or state.spawnPointId
+    state.spawnPointIndex = spawn and tonumber(spawn.index) or state.spawnPointIndex
+    state.spawnPointName = spawn and spawn.name and tostring(spawn.name) or state.spawnPointName
     state.uid = TN.getZombieUID(zombie)
     state.onlineId = TN.getZombieOnlineId(zombie)
     state.x = spawn and spawn.x or nil
@@ -337,6 +340,7 @@ local function markSpawned(npc, zombie, spawn)
     TN.Save.record("spawned", npc.id, {
         uid = state.uid,
         onlineId = state.onlineId,
+        spawnPointId = state.spawnPointId,
     })
     TN.Save.transmit()
     return state
@@ -347,6 +351,9 @@ local function markSeen(npc, zombie, spawn)
     local now = TN.getWorldAgeHours()
     state.status = "spawned"
     state.behaviorState = tostring(state.behaviorState or "idle")
+    state.spawnPointId = spawn and spawn.id and tostring(spawn.id) or state.spawnPointId
+    state.spawnPointIndex = spawn and tonumber(spawn.index) or state.spawnPointIndex
+    state.spawnPointName = spawn and spawn.name and tostring(spawn.name) or state.spawnPointName
     state.uid = TN.getZombieUID(zombie)
     state.onlineId = TN.getZombieOnlineId(zombie)
     state.x = spawn and spawn.x or nil
@@ -359,8 +366,8 @@ local function markSeen(npc, zombie, spawn)
     return state
 end
 
-local function spawnZombieForNPC(player, npc)
-    local spawn = TN.getNPCSpawn(npc)
+local function spawnZombieForNPC(player, npc, spawnId)
+    local spawn = TN.Registry.selectNPCSpawn(npc, spawnId)
     if not spawn then
         return nil, "missing_spawn"
     end
@@ -434,14 +441,6 @@ function TN.Server.Commands.RequestSpawn(player, args)
         return
     end
 
-    local spawn = TN.getNPCSpawn(npc)
-    if spawn and player then
-        local allowedRadius = (tonumber(spawn.spawnRadius) or 90) + 40
-        if not TN.isPlayerNear(player, spawn, allowedRadius) then
-            return
-        end
-    end
-
     if not TN.Registry.isNPCEnabled(npc, { player = player, source = "server_spawn" }) then
         local state = TN.Save.ensureNPCState(npc.id)
         state.status = "inactive"
@@ -449,7 +448,16 @@ function TN.Server.Commands.RequestSpawn(player, args)
         return
     end
 
-    local zombie, reason = spawnZombieForNPC(player, npc)
+    local spawn = TN.Registry.selectNPCSpawn(npc, args.spawnId)
+    TN.Save.transmit()
+    if spawn and player then
+        local allowedRadius = (tonumber(spawn.spawnRadius) or 90) + 40
+        if not TN.isPlayerNear(player, spawn, allowedRadius) then
+            return
+        end
+    end
+
+    local zombie, reason = spawnZombieForNPC(player, npc, args.spawnId)
     if not zombie then
         TN.debug("NPC spawn skipped for " .. tostring(npc.id) .. ": " .. tostring(reason))
     end
@@ -487,7 +495,31 @@ function TN.Server.Commands.SetState(player, args)
     TN.Behaviors.setState(args.npcId, args.state or "idle", args.reason, args.extra)
 end
 
+local function ensureRandomSpawnSelections()
+    local changed = false
+    for _, npc in ipairs(TN.getNPCs()) do
+        if TN.Registry.usesRandomSpawn and TN.Registry.usesRandomSpawn(npc) then
+            local state = TN.Save.ensureNPCState(npc.id)
+            local selected = state.spawnPointId and TN.Registry.findSpawnPoint(npc, state.spawnPointId) or nil
+            if not selected then
+                state.spawnPointId = nil
+                state.spawnPointIndex = nil
+                state.spawnPointName = nil
+                if TN.Registry.selectNPCSpawn(npc) then
+                    changed = true
+                end
+            end
+        end
+    end
+
+    if changed then
+        TN.Save.transmit()
+    end
+end
+
 local function checkNPCExistence()
+    ensureRandomSpawnSelections()
+
     local data = TN.Save.getData()
     local changed = false
 
@@ -526,6 +558,10 @@ end
 
 if Events and Events.EveryOneMinute then
     Events.EveryOneMinute.Add(checkNPCExistence)
+end
+
+if Events and Events.OnInitGlobalModData then
+    Events.OnInitGlobalModData.Add(ensureRandomSpawnSelections)
 end
 
 TN.log("Server loaded v" .. tostring(TN.VERSION))

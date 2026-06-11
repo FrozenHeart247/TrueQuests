@@ -20,6 +20,46 @@ local FIELD_CLINIC = {
     radius = 12,
 }
 
+local CONTACT_NPC_IDS = {
+    marlow_relay = "tq_marlow_relay",
+    tess_roofline = "tq_tess_roofline",
+    bradley_static = "tq_bradley_static",
+}
+
+local function npcTurnIn(contactId, fallback)
+    return function(ctx)
+        local contact = ctx and ctx.contact or TQ.getContact(contactId)
+        local npcId = contact and contact.npcId or CONTACT_NPC_IDS[tostring(contactId or "")]
+        local TN = TrueNPC
+        local npc = TN and TN.getNPC and TN.getNPC(npcId) or nil
+        local spawn = nil
+        if npc and TN and TN.Registry and TN.Registry.selectNPCSpawn then
+            spawn = TN.Registry.selectNPCSpawn(npc)
+            if TN.Save and TN.Save.transmit then
+                TN.Save.transmit()
+            end
+        end
+        spawn = spawn or (npc and TN.getNPCSpawn and TN.getNPCSpawn(npc) or nil)
+
+        if type(spawn) == "table" and spawn.x and spawn.y then
+            local x = tonumber(spawn.x) or 0
+            local y = tonumber(spawn.y) or 0
+            local z = tonumber(spawn.z) or 0
+            local name = tostring(contact and contact.name or "Survivor")
+            return {
+                type = "zone",
+                label = name .. "'s current spot (" .. tostring(math.floor(x)) .. ", " .. tostring(math.floor(y)) .. ")",
+                x = x + 0.5,
+                y = y + 0.5,
+                z = z,
+                radius = tonumber(spawn.radius) or 10,
+            }
+        end
+
+        return TQ.deepcopy(fallback)
+    end
+end
+
 TQ.registerDialogueBank("tq_medics_generic", {
     greeting = {
         "Field clinic listening. Keep your hands clean and your voice low.",
@@ -474,11 +514,12 @@ TQ.registerContact({
     name = "Marlow",
     role = "independent",
     factionId = "independent",
+    npcId = "tq_marlow_relay",
     contactType = "radio",
     frequency = 92100,
     icon = "media/textures/TrueQuests/NPC/independent_icon.png",
     portrait = "media/textures/TrueQuests/NPC/independent.png",
-    turnIn = MULDRAUGH_RELAY,
+    turnIn = npcTurnIn("marlow_relay", MULDRAUGH_RELAY),
     rewardTables = {
         easy = "tq_independent_easy",
     },
@@ -491,11 +532,12 @@ TQ.registerContact({
     name = "Tess",
     role = "independent",
     factionId = "independent",
+    npcId = "tq_tess_roofline",
     contactType = "radio",
     frequency = 92100,
     icon = "media/textures/TrueQuests/NPC/independent_icon.png",
     portrait = "media/textures/TrueQuests/NPC/independent.png",
-    turnIn = MULDRAUGH_RELAY,
+    turnIn = npcTurnIn("tess_roofline", MULDRAUGH_RELAY),
     rewardTables = {
         easy = "tq_independent_easy",
     },
@@ -508,11 +550,12 @@ TQ.registerContact({
     name = "Bradley",
     role = "independent",
     factionId = "independent",
+    npcId = "tq_bradley_static",
     contactType = "radio",
     frequency = 92100,
     icon = "media/textures/TrueQuests/NPC/independent_icon.png",
     portrait = "media/textures/TrueQuests/NPC/independent.png",
-    turnIn = MULDRAUGH_RELAY,
+    turnIn = npcTurnIn("bradley_static", MULDRAUGH_RELAY),
     rewardTables = {
         easy = "tq_independent_easy",
     },
@@ -583,7 +626,7 @@ TQ.registerQuestTemplate({
 TQ.registerQuestTemplate({
     id = "marlow_barricade_nails",
     title = "Barricade Work",
-    description = "A safehouse crew is boarding windows before nightfall. Bring nails to the Muldraugh relay cache.",
+    description = "A safehouse crew is boarding windows before nightfall. Bring nails back to Marlow's current spot.",
     difficulty = "easy",
     contact = "marlow_relay",
     factionId = "independent",
@@ -603,7 +646,7 @@ TQ.registerQuestTemplate({
 TQ.registerQuestTemplate({
     id = "tess_spare_sheets",
     title = "Spare Sheets",
-    description = "Tess is cutting sheets into bandages and window covers. Bring spare sheets to the Muldraugh relay cache.",
+    description = "Tess is cutting sheets into bandages and window covers. Bring spare sheets back to her current spot.",
     difficulty = "easy",
     contact = "tess_roofline",
     factionId = "independent",
@@ -623,7 +666,7 @@ TQ.registerQuestTemplate({
 TQ.registerQuestTemplate({
     id = "bradley_water_run",
     title = "Water Run",
-    description = "Bradley is trying to stock a small hideout before the taps go dry. Bring a sealed water bottle to the relay cache.",
+    description = "Bradley is trying to stock a small hideout before the taps go dry. Bring a sealed water bottle back to his current spot.",
     difficulty = "easy",
     contact = "bradley_static",
     factionId = "independent",
