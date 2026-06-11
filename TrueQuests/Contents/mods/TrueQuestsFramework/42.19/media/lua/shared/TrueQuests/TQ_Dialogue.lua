@@ -8,12 +8,20 @@ TQ.Dialogue.banks = TQ.Dialogue.banks or {}
 TQ.Dialogue.treeBanks = TQ.Dialogue.treeBanks or {}
 TQ.Dialogue.topics = TQ.Dialogue.topics or {}
 
-local function pickLine(value)
+local function pickLine(value, context)
+    if type(value) == "function" then
+        local ok, result = pcall(value, context or {})
+        if ok then
+            return pickLine(result, context)
+        end
+        return nil
+    end
+
     if type(value) == "table" then
         if #value == 0 then
             return nil
         end
-        return tostring(value[TQ.randomInt(1, #value)])
+        return pickLine(value[TQ.randomInt(1, #value)], context)
     end
 
     if value ~= nil then
@@ -227,6 +235,22 @@ local function getContactFactionId(contact)
     return tostring(contact and (contact.factionId or contact.faction) or "independent")
 end
 
+local function topicContext(topic, contact, context)
+    context = type(context) == "table" and context or {}
+    contact = type(contact) == "table" and contact or nil
+
+    local contactId = tostring(contact and contact.id or "")
+    local factionId = getContactFactionId(contact)
+    return {
+        contact = contact,
+        contactId = contactId,
+        factionId = factionId,
+        player = context.player,
+        topic = topic,
+        source = context,
+    }
+end
+
 local function topicSpecificity(topic)
     local score = 0
     if topic.contactId or type(topic.contactIds) == "table" then
@@ -272,13 +296,7 @@ local function topicApplies(topic, contact, context)
     end
 
     if type(topic.condition) == "function" then
-        local ok, result = pcall(topic.condition, {
-            contact = contact,
-            contactId = contactId,
-            factionId = factionId,
-            player = context.player,
-            topic = topic,
-        })
+        local ok, result = pcall(topic.condition, topicContext(topic, contact, context))
         if not ok or result == false then
             return false
         end
@@ -342,8 +360,8 @@ local function topicOption(topic)
     return option
 end
 
-local function topicLine(topic, contact)
-    local line = pickLine(topic.npc or topic.response or topic.line or topic.lines)
+local function topicLine(topic, contact, context)
+    local line = pickLine(topic.npc or topic.response or topic.line or topic.lines, topicContext(topic, contact, context))
     if line then
         return line
     end
@@ -399,8 +417,13 @@ local function dynamicTopicNode(contact, nodeId, context)
     end
     table.insert(options, { text = tostring(topic.backText or "Back."), next = backTarget })
 
+    local npcLine = topicLine(topic, contact, context)
+    if type(topic.onEnter) == "function" then
+        pcall(topic.onEnter, topicContext(topic, contact, context))
+    end
+
     return {
-        npc = topicLine(topic, contact),
+        npc = npcLine,
         options = options,
     }
 end

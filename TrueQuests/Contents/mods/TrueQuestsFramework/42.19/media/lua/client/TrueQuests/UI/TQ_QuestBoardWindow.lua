@@ -99,6 +99,9 @@ local function reasonText(reason, quest)
     if reason == "consume_failed" then
         return "Required items are missing."
     end
+    if reason == "expired" then
+        return "That request has already expired."
+    end
     if reason == "contact_inactive" then
         return "That contact is not answering right now."
     end
@@ -302,7 +305,15 @@ local function questMetaText(quest)
         text = "Quest in progress."
     end
 
-    return appendTurnIn(text, quest and quest.turnIn)
+    text = appendTurnIn(text, quest and quest.turnIn)
+    if TrueQuests.QuestManager and TrueQuests.QuestManager.formatTimeRemaining then
+        local timer = TrueQuests.QuestManager.formatTimeRemaining(quest)
+        if timer and timer ~= "No deadline" then
+            text = text .. ". Time: " .. tostring(timer)
+        end
+    end
+
+    return text
 end
 
 local function offerRefreshDue(player)
@@ -639,6 +650,12 @@ function TQ_QuestBoardWindow:getSelectedContact()
     return self.selectedContactId and TrueQuests.getContact(self.selectedContactId) or nil
 end
 
+function TQ_QuestBoardWindow:hasPendingFailureNotice()
+    return TrueQuests.QuestManager
+        and TrueQuests.QuestManager.getPendingFailureNotice
+        and TrueQuests.QuestManager.getPendingFailureNotice(self.player, self.selectedFactionId) ~= nil
+end
+
 function TQ_QuestBoardWindow:onBack()
     if self.mode == "dialogue" then
         self.mode = "contacts"
@@ -663,7 +680,7 @@ function TQ_QuestBoardWindow:loadDialogueNode(nodeId)
         return
     end
 
-    local node = TrueQuests.Dialogue and TrueQuests.Dialogue.getTreeNode and TrueQuests.Dialogue.getTreeNode(contact, nodeId) or nil
+    local node = TrueQuests.Dialogue and TrueQuests.Dialogue.getTreeNode and TrueQuests.Dialogue.getTreeNode(contact, nodeId, { player = self.player }) or nil
     self.currentDialogueNode = tostring(nodeId or "start")
     self.currentDialogueNodeData = node
     self.currentLine = tostring((node and node.npcLine) or TrueQuests.Dialogue.getContactLine(contact, "greeting", "The signal clears."))
@@ -679,6 +696,11 @@ end
 function TQ_QuestBoardWindow:showJobsFromDialogue()
     local contact = self:getSelectedContact()
     if not contact then
+        return
+    end
+
+    if self:hasPendingFailureNotice() then
+        self:setDialogueNode("failure_notice")
         return
     end
 
@@ -743,6 +765,11 @@ end
 function TQ_QuestBoardWindow:onAccept()
     local entry = self:getSelectedJobEntry()
     if not entry or entry.kind ~= "offer" then
+        return
+    end
+
+    if self:hasPendingFailureNotice() then
+        self:setDialogueNode("failure_notice")
         return
     end
 
@@ -822,7 +849,13 @@ function TQ_QuestBoardWindow:openContact(contactId)
     self.selectedContactId = tostring(contactId)
     self.selectedFactionId = contactFactionId(contact)
     self.jobsRevealed = false
-    self:loadDialogueNode("start")
+
+    local nodeId = "start"
+    if self:hasPendingFailureNotice() then
+        nodeId = "failure_notice"
+    end
+
+    self:loadDialogueNode(nodeId)
     self:refreshData()
 end
 

@@ -82,6 +82,119 @@ local function ensureOfferWindow(data)
     return state, false
 end
 
+local function ensureFailureNotices(data)
+    data.contacts = type(data.contacts) == "table" and data.contacts or {}
+    data.contacts.failedByFaction = type(data.contacts.failedByFaction) == "table" and data.contacts.failedByFaction or {}
+    return data.contacts.failedByFaction
+end
+
+local function failurePenaltyForQuest(quest)
+    if not quest then
+        return 0
+    end
+
+    local explicit = quest.failureReputation or quest.reputationPenalty or quest.reputationOnFailure
+    if explicit ~= nil then
+        local amount = tonumber(explicit) or 0
+        if amount > 0 then
+            amount = -amount
+        end
+        return amount
+    end
+
+    local gain = 0
+    if TQ.Factions and TQ.Factions.getQuestReputationGain then
+        gain = tonumber(TQ.Factions.getQuestReputationGain(quest)) or 0
+    end
+
+    if gain <= 0 then
+        return -1
+    end
+
+    return -math.max(1, math.floor(gain / 2))
+end
+
+local function applyFailureReputation(player, quest)
+    if not quest or quest.reputationFailed then
+        return 0
+    end
+
+    local amount = failurePenaltyForQuest(quest)
+    local factionId = tostring(quest.factionId or "independent")
+    local contactId = quest.contactId and tostring(quest.contactId) or nil
+
+    if amount ~= 0 and TQ.Factions and TQ.Factions.addReputation then
+        TQ.Factions.addReputation(player, factionId, amount, contactId, { deferTouch = true })
+    end
+
+    quest.reputationFailed = {
+        factionId = factionId,
+        contactId = contactId,
+        amount = amount,
+    }
+
+    return amount
+end
+
+local function recordFailureNotice(data, quest, reason, penalty)
+    if not quest then
+        return
+    end
+
+    local factionId = tostring(quest.factionId or "independent")
+    local notices = ensureFailureNotices(data)
+    local notice = notices[factionId]
+    if type(notice) ~= "table" then
+        notice = { count = 0 }
+    end
+
+    notice.count = (tonumber(notice.count) or 0) + 1
+    notice.questId = tostring(quest.id or "")
+    notice.templateId = tostring(quest.templateId or "")
+    notice.questTitle = tostring(quest.title or quest.templateId or "request")
+    notice.contactId = tostring(quest.contactId or "")
+    notice.reason = tostring(reason or "failed")
+    notice.penalty = tonumber(penalty) or 0
+    notice.lastAt = tonumber(quest.failedAt) or TQ.getWorldAgeHours()
+    notice.acknowledged = false
+    notices[factionId] = notice
+end
+
+local function failActiveQuestAtIndex(player, data, index, reason)
+    if type(data) ~= "table" or type(data.active) ~= "table" then
+        return false
+    end
+
+    local quest = data.active[index]
+    if not quest then
+        return false
+    end
+
+    quest.status = "failed"
+    quest.failedAt = TQ.getWorldAgeHours()
+    quest.failedReason = tostring(reason or "failed")
+    local penalty = applyFailureReputation(player, quest)
+    recordFailureNotice(data, quest, reason, penalty)
+
+    table.remove(data.active, index)
+    data.failed = type(data.failed) == "table" and data.failed or {}
+    table.insert(data.failed, quest)
+
+    data.history = type(data.history) == "table" and data.history or {}
+    table.insert(data.history, {
+        event = "failed",
+        questId = quest.id,
+        templateId = quest.templateId,
+        contactId = quest.contactId,
+        factionId = quest.factionId,
+        reason = quest.failedReason,
+        reputation = quest.reputationFailed,
+        at = quest.failedAt,
+    })
+
+    return true
+end
+
 local function isCompletedBlocked(data, template, offerState)
     if not template or template.unique == false then
         return false
@@ -231,6 +344,50 @@ function TQ.QuestManager.getActiveQuests(player)
     return data.active
 end
 
+function TQ.QuestManager.isQuestExpired(quest)
+    if not quest then
+        return false
+    end
+
+    if quest.status == "rewardPending" or quest.status == "completed" or quest.status == "failed" then
+        return false
+    end
+
+    local expiresAt = tonumber(quest.expiresAt)
+    return expiresAt ~= nil and expiresAt > 0 and TQ.getWorldAgeHours() >= expiresAt
+end
+
+function TQ.QuestManager.getQuestTimeRemaining(quest)
+    local expiresAt = tonumber(quest and quest.expiresAt)
+    if not expiresAt or expiresAt <= 0 then
+        return nil
+    end
+
+    return math.max(0, expiresAt - TQ.getWorldAgeHours())
+end
+
+function TQ.QuestManager.formatTimeRemaining(quest)
+    local remaining = TQ.QuestManager.getQuestTimeRemaining(quest)
+    if remaining == nil then
+        return "No deadline"
+    end
+    if remaining <= 0 then
+        return "Expired"
+    end
+
+    local hours = math.ceil(remaining)
+    if hours >= 24 then
+        local days = math.floor(hours / 24)
+        local rest = hours - (days * 24)
+        if rest > 0 then
+            return tostring(days) .. "d " .. tostring(rest) .. "h"
+        end
+        return tostring(days) .. "d"
+    end
+
+    return tostring(hours) .. "h"
+end
+
 function TQ.QuestManager.findActiveQuest(player, questId)
     local data = TQ.Save.getData(player)
     local index = findIndexById(data.active, questId)
@@ -266,8 +423,20 @@ end
 
 function TQ.QuestManager.updateAll(player)
     local data = TQ.Save.getData(player)
-    for _, quest in ipairs(data.active or {}) do
-        TQ.QuestManager.updateQuestProgress(quest, player)
+    local changed = false
+    for index = #(data.active or {}), 1, -1 do
+        local quest = data.active[index]
+        if TQ.QuestManager.isQuestExpired(quest) then
+            if failActiveQuestAtIndex(player, data, index, "expired") then
+                changed = true
+            end
+        else
+            TQ.QuestManager.updateQuestProgress(quest, player)
+        end
+    end
+
+    if changed then
+        TQ.Save.touch(player)
     end
     return data.active
 end
@@ -380,6 +549,11 @@ function TQ.QuestManager.canTurnIn(player, quest)
         return false, "missing_quest"
     end
 
+    if TQ.QuestManager.isQuestExpired(quest) then
+        TQ.QuestManager.failQuest(player, quest.id, "expired")
+        return false, "expired"
+    end
+
     TQ.QuestManager.updateQuestProgress(quest, player)
 
     if quest.status ~= "readyToTurnIn" then
@@ -473,11 +647,33 @@ function TQ.QuestManager.failQuest(player, questId, reason)
         return false
     end
 
-    quest.status = "failed"
-    quest.failedAt = TQ.getWorldAgeHours()
-    quest.failedReason = reason
-    table.remove(data.active, index)
-    table.insert(data.failed, quest)
+    local failed = failActiveQuestAtIndex(player, data, index, reason)
+    if failed then
+        TQ.Save.touch(player)
+    end
+    return failed
+end
+
+function TQ.QuestManager.getPendingFailureNotice(player, factionId)
+    local data = TQ.Save.getData(player)
+    local notices = ensureFailureNotices(data)
+    local notice = notices[tostring(factionId or "independent")]
+    if type(notice) == "table" and notice.acknowledged ~= true then
+        return notice
+    end
+    return nil
+end
+
+function TQ.QuestManager.acknowledgeFailureNotice(player, factionId)
+    local data = TQ.Save.getData(player)
+    local notices = ensureFailureNotices(data)
+    local notice = notices[tostring(factionId or "independent")]
+    if type(notice) ~= "table" or notice.acknowledged == true then
+        return false
+    end
+
+    notice.acknowledged = true
+    notice.acknowledgedAt = TQ.getWorldAgeHours()
     TQ.Save.touch(player)
     return true
 end

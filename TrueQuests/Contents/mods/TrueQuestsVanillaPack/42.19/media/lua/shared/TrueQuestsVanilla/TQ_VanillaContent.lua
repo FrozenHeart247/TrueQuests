@@ -69,6 +69,38 @@ TQ.registerDialogueBank("tq_independent_generic", {
     },
 })
 
+local function hasPendingFailureNotice(ctx)
+    return TQ.QuestManager
+        and TQ.QuestManager.getPendingFailureNotice
+        and TQ.QuestManager.getPendingFailureNotice(ctx and ctx.player, ctx and ctx.factionId) ~= nil
+end
+
+local function failureNoticeLine(ctx)
+    local notice = TQ.QuestManager and TQ.QuestManager.getPendingFailureNotice and TQ.QuestManager.getPendingFailureNotice(ctx and ctx.player, ctx and ctx.factionId) or nil
+    local title = tostring((notice and notice.questTitle) or "that request")
+
+    if ctx and ctx.factionId == "medics" then
+        return "You missed the window on " .. title .. ". Patients do not stop needing help because the roads are bad. The clinic's trust took a hit."
+    end
+
+    return "You let " .. title .. " go cold. Favors matter out here, and that one cost you trust."
+end
+
+local function acknowledgeFailureNotice(ctx)
+    if TQ.QuestManager and TQ.QuestManager.acknowledgeFailureNotice then
+        TQ.QuestManager.acknowledgeFailureNotice(ctx and ctx.player, ctx and ctx.factionId)
+    end
+end
+
+TQ.registerDialogueTopic({
+    id = "failure_notice",
+    text = "About the job I missed.",
+    priority = 1,
+    condition = hasPendingFailureNotice,
+    npc = failureNoticeLine,
+    onEnter = acknowledgeFailureNotice,
+})
+
 TQ.registerDialogueTopic({
     id = "about",
     text = "Tell me about yourself.",
@@ -497,6 +529,7 @@ TQ.registerQuestTemplate({
     factionId = "medics",
     unique = true,
     repeatable = true,
+    timeLimitHours = 24,
     tags = { "medical", "delivery" },
     objectives = {
         { type = "item", item = "Base.Bandage", count = { min = 4, max = 7 }, label = "Clean bandages" },
@@ -516,6 +549,7 @@ TQ.registerQuestTemplate({
     factionId = "medics",
     unique = true,
     repeatable = true,
+    timeLimitHours = 24,
     tags = { "medical", "delivery" },
     objectives = {
         { type = "item", item = "Base.AlcoholWipes", count = { min = 2, max = 5 }, label = "Alcohol wipes" },
@@ -535,6 +569,7 @@ TQ.registerQuestTemplate({
     factionId = "medics",
     unique = true,
     repeatable = true,
+    timeLimitHours = 24,
     tags = { "medical", "delivery" },
     objectives = {
         { type = "item", item = "Base.Pills", count = { min = 1, max = 2 }, label = "Pain medication" },
@@ -554,6 +589,7 @@ TQ.registerQuestTemplate({
     factionId = "independent",
     unique = true,
     repeatable = true,
+    timeLimitHours = 24,
     tags = { "supplies", "delivery" },
     objectives = {
         { type = "item", item = "Base.Nails", count = { min = 20, max = 40 }, label = "Nails" },
@@ -573,6 +609,7 @@ TQ.registerQuestTemplate({
     factionId = "independent",
     unique = true,
     repeatable = true,
+    timeLimitHours = 24,
     tags = { "survival", "delivery" },
     objectives = {
         { type = "item", item = "Base.Sheet", count = { min = 2, max = 4 }, label = "Spare sheets" },
@@ -592,6 +629,7 @@ TQ.registerQuestTemplate({
     factionId = "independent",
     unique = true,
     repeatable = true,
+    timeLimitHours = 24,
     tags = { "survival", "delivery" },
     objectives = {
         { type = "item", item = "Base.WaterBottle", count = 1, label = "Sealed water bottle" },

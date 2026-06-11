@@ -21,6 +21,20 @@ local function resolveTurnIn(template)
     return nil
 end
 
+local function resolveTimeLimit(template)
+    if type(template) ~= "table" then
+        return nil
+    end
+
+    local value = template.timeLimitHours or template.deadlineHours or template.durationHours
+    value = tonumber(value)
+    if value and value > 0 then
+        return value
+    end
+
+    return nil
+end
+
 function TQ.QuestFactory.build(templateId, questId, player, options)
     local template = TQ.getQuestTemplate(templateId)
     if not template then
@@ -53,6 +67,8 @@ function TQ.QuestFactory.build(templateId, questId, player, options)
 
     local rewardSpec = TQ.Rewards.resolveSpec(template.rewards or template.reward or {}, context)
 
+    local createdAt = TQ.getWorldAgeHours()
+    local timeLimitHours = resolveTimeLimit(template)
     local quest = {
         id = questId,
         templateId = tostring(template.id),
@@ -64,16 +80,22 @@ function TQ.QuestFactory.build(templateId, questId, player, options)
         factionId = factionId,
         factionName = tostring((faction and faction.name) or factionId or ""),
         status = "accepted",
-        createdAt = TQ.getWorldAgeHours(),
+        createdAt = createdAt,
         objectives = objectives,
         turnIn = resolveTurnIn(template),
         reputation = template.reputation,
+        failureReputation = template.failureReputation or template.reputationPenalty or template.reputationOnFailure,
         rewardSpec = TQ.deepcopy(rewardSpec),
         rewardChoices = TQ.Rewards.buildChoices(rewardSpec, context),
         dialogue = TQ.deepcopy(template.dialogue or {}),
         tags = TQ.deepcopy(template.tags or {}),
         unique = template.unique ~= false,
     }
+
+    if timeLimitHours then
+        quest.timeLimitHours = timeLimitHours
+        quest.expiresAt = createdAt + timeLimitHours
+    end
 
     return quest
 end
