@@ -961,15 +961,51 @@ function TQ.QuestItems.ensureForPlayer(player)
     return changed
 end
 
-function TQ.QuestItems.getQuestMarker(quest)
-    if not quest or quest.status == "completed" or quest.status == "failed" or quest.status == "rewardPending" then
+local function buildTurnInMarker(quest)
+    local turnIn = quest and quest.turnIn
+    if type(turnIn) ~= "table" or not turnIn.x or not turnIn.y then
         return nil
     end
 
+    local label = "Turn in: "
+    if TQ.turnInToText then
+        label = label .. TQ.turnInToText(turnIn)
+    elseif turnIn.label then
+        label = label .. tostring(turnIn.label)
+    else
+        label = label .. tostring(math.floor(tonumber(turnIn.x) or 0)) .. ", " .. tostring(math.floor(tonumber(turnIn.y) or 0))
+    end
+
+    return {
+        x = tonumber(turnIn.x),
+        y = tonumber(turnIn.y),
+        z = tonumber(turnIn.z) or 0,
+        label = label,
+        sourceMode = "turnIn",
+    }
+end
+
+function TQ.QuestItems.getQuestMarker(quest)
+    if not quest or quest.status == "completed" or quest.status == "failed" then
+        return nil
+    end
+
+    local hasObjective = false
+    local hasIncompleteObjective = false
     for _, objective in ipairs(quest.objectives or {}) do
-        if objective and objective.marker and objective.completed ~= true then
-            return objective.marker, objective
+        if objective then
+            hasObjective = true
         end
+        if objective and objective.marker and objective.completed ~= true then
+            hasIncompleteObjective = true
+            return objective.marker, objective
+        elseif objective and objective.completed ~= true then
+            hasIncompleteObjective = true
+        end
+    end
+
+    if hasObjective and not hasIncompleteObjective then
+        return buildTurnInMarker(quest), nil
     end
 
     return nil

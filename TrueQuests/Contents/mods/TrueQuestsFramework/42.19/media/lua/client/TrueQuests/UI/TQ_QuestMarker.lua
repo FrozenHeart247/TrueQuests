@@ -86,12 +86,25 @@ function TQ_QuestMarker:getQuest()
     return quest
 end
 
+function TQ_QuestMarker:refreshQuestProgress(quest)
+    self.progressCheckTicks = (tonumber(self.progressCheckTicks) or 0) + 1
+    if self.progressCheckTicks < 30 then
+        return
+    end
+
+    self.progressCheckTicks = 0
+    if quest and TrueQuests.QuestManager and TrueQuests.QuestManager.updateQuestProgress then
+        TrueQuests.QuestManager.updateQuestProgress(quest, self.player)
+    end
+end
+
 function TQ_QuestMarker:update()
     if ISUIElement.update then
         ISUIElement.update(self)
     end
 
     local quest = self:getQuest()
+    self:refreshQuestProgress(quest)
     local target = markerTarget(quest)
     if not quest or not target then
         self:close()

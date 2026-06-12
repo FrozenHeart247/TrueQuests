@@ -783,7 +783,7 @@ TQ.registerQuestTemplate({
             label = "Tess's happy face pillow",
             questItem = true,
             questItemName = "Tess's Happy Face Pillow",
-            questItemTooltip = "A faded happy face pillow Tess described over the radio.",
+            questItemTooltip = "A faded happy face pillow Tess asked you to recover.",
             sourceHint = "Search the carrier zombie near Tess's old safehouse route.",
             source = npcSearchSource("tess_roofline", MULDRAUGH_RELAY, {
                 mode = "zombie",

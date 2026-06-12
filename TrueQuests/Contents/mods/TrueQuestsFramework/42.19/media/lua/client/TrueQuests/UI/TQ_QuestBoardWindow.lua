@@ -350,6 +350,10 @@ local function offerRefreshText(player)
     return "refresh in " .. tostring(math.ceil(remaining)) .. "h"
 end
 
+function TQ_QuestBoardWindow:isRadioBoard()
+    return self.device ~= nil
+end
+
 function TQ_QuestBoardWindow:initialise()
     ISPanel.initialise(self)
 end
@@ -605,11 +609,13 @@ function TQ_QuestBoardWindow:updateControls()
     self.closeButton:setEnable(true)
 
     local canAccept = showJobs and selected and selected.kind == "offer"
-    local canTurnIn = showJobs and selected and selected.kind == "active"
+    local canTurnIn = showJobs and not self:isRadioBoard() and selected and selected.kind == "active"
     self.acceptButton:setEnable(canAccept == true)
     self.turnInButton:setEnable(canTurnIn == true)
 
-    if selected and selected.kind == "active" and selected.quest and selected.quest.status == "rewardPending" then
+    if self:isRadioBoard() then
+        setButtonTitle(self.turnInButton, "In Person")
+    elseif selected and selected.kind == "active" and selected.quest and selected.quest.status == "rewardPending" then
         setButtonTitle(self.turnInButton, "Rewards")
     else
         setButtonTitle(self.turnInButton, "Turn In")
@@ -791,6 +797,11 @@ function TQ_QuestBoardWindow:onAccept()
 end
 
 function TQ_QuestBoardWindow:onTurnIn()
+    if self:isRadioBoard() then
+        TrueQuests.say(self.player, "You need to meet them in person.")
+        return
+    end
+
     local entry = self:getSelectedJobEntry()
     if not entry or entry.kind ~= "active" then
         return
