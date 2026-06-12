@@ -109,9 +109,9 @@ end
 -- registerDialogueTopic = actual RPG-style conversation buttons and branches.
 TQ.registerDialogueBank("tq_medics_generic", {
     greeting = {
-        "Field clinic listening. Keep your hands clean and your voice low.",
-        "You are on the clinic band. Report injuries or useful supplies.",
-        "Clinic relay is live. Make it quick.",
+        "Keep your hands clean and your voice low.",
+        "You are for doc examination? Waint in line. Ha ha.. ha... Anyway you need something? We are short on time",
+        "Welcome to Last Prescription clinic. Speak what you need",
     },
     about = {
         "We patch people up, move them before the dead gather, and hope the next call is not worse.",
@@ -119,17 +119,131 @@ TQ.registerDialogueBank("tq_medics_generic", {
     },
     work = {
         "We need supplies more than heroics.",
-        "If you can carry medical stock to the drop, we can keep people alive.",
+        "If you can carry medical stock to the drop, we can keep people alive. Anything else is useful too",
     },
     accept = {
-        "Copy. Bring it sealed if you can.",
-        "Good. The clinic will mark the drop.",
+        "Great. First of all stay alive and healthy. We dont need another dead body walking around",
+        "Good. Please don't take it too long but don't rush it either. Most of the current death caused by stupid decisions",
     },
     complete = {
         "That buys us another day. Choose from the clinic cache.",
         "Clean delivery. Take what you need.",
     },
 })
+
+TQ.registerDialogueBank("tq_amelie_crowe", {
+    greeting = {
+        "If you are healthy enough to walk, you are healthy enough to help.",
+        "Ugh... what do you need? If this is about a scratch, try surviving it dramatically somewhere else.",
+        "The Last Prescription clinic is still standing, somehow. So, what do you want? Spit it out.",
+        "*Yawn* Mmm... waking up remains a medical tragedy. What do you need?",
+        "If you came here to complain, take a number. If you came to help, congratulations, you are already more useful than most.",
+        "I am busy keeping people alive against their best efforts. Make this quick.",
+        "Welcome to The Last Prescription. We are low on supplies, patience, and miracles. What do you want?.",
+        "Ugh... what now? Please tell me this is important and not another heroic little paper cut.",
+        "Talk fast. I have patients, corpses, and a headache, and only two of those are negotiable.",
+         
+    },
+    about = {
+        "Fine. Ask one precise thing.",
+        "You want my story? Pick a subject.",
+        "If this is small talk, I am billing you in disinfectant.",
+    },
+    work = {
+        "I do not hand out errands. I mark problems and hope someone useful answers.",
+        "If you can move without bleeding, I can give you something worth doing.",
+        "There is always work. The dead are tireless, the sick are impatient, and supplies keep disappearing like they have legs.",       
+        "Pick something from the list. Preferably something you can finish without turning it into my problem.",
+        "These are not heroic quests. They are ugly little necessities. Welcome to survival, try not to look disappointed.",
+        "I have patients, shortages, broken equipment, and people with the survival instincts of wet paper. Choose where you want to be useful.",    
+        "Do not ask me which task is safest. If it were safe, I would have sent one of the idiots already.",
+        "Take a job if you can handle it. Leave it if you cannot. I prefer honest cowardice over confident incompetence.",
+        "If you fail, try to fail far away from the clinic. I have enough messes indoors.",
+    },
+    accept = {
+        "Good. If it gets ugly, adapt. If it gets stupid, leave. I prefer survivors over martyrs.",
+        "Try to finish it without bleeding on anything important. Including yourself.",
+        "Good. Bring results, not excuses. I already have enough of those lying around.",
+        "All right. Handle it properly, and I might even pretend I expected that.",
+        "Good. If you get bitten, do not come back expecting a touching speech.",
+        "Good. I will mark it as taken. You try to make sure I do not have to mark you as missing.",
+        "Task is yours. Do not improvise unless the plan is already dead. Which, admittedly, happens often.",
+    },
+    complete = {
+        "That helps. Choose something from the clinic cache before I change my mind.",
+        "Good. You did the job and came back in one piece. I am almost impressed. Truly.",
+        "That will keep this place breathing a little longer. Choose your payment.",
+        "You brought results. I like results. They make fewer noises than excuses.",
+        "That solves one problem. Unfortunately, the world has excellent production speed. Pick something and move along.",
+        "The clinic can use this. You can use a reward. Look at us, pretending this is a functioning economy.",
+        "That was handled properly. I will file this under rare pleasant surprises.",
+        "Fine, you earned it. The cache is open. Do not grab like a raccoon with a medical license.",
+        "You did well. There, I said it. Do not make it weird.",
+    },
+})
+
+local AMELIE_ABOUT_TOPICS = {
+    {
+        id = "amelie_about_identity",
+        text = "Who are you?",
+        npc = "Name's Amelie Crowe. I was a surgeon before all this. Cleaner rooms, better tools, fewer patients trying to bite me. I almost miss it.",
+        priority = 10,
+    },
+    {
+        id = "amelie_about_clinic",
+        text = "What is The Last Prescription?",
+        npc = "I used to run a clinic. A real one. Appointments, paperwork, sterilized instruments, people complaining about waiting ten minutes. Adorable times. Now I run The Last Prescription. Small clinic, loud patients, bad lighting, worse coffee. Still alive, which makes it a luxury resort by current standards.",
+        priority = 20,
+    },
+    {
+        id = "amelie_about_leadership",
+        text = "Are you the leader here?",
+        npc = "Some people call me the leader of these emptyheads. I am not. I just happen to be the only one here with actual medical experience and a functioning brain. Leadership is mostly telling people not to do stupid things, then treating them when they do the stupid thing anyway.",
+        priority = 30,
+    },
+    {
+        id = "amelie_about_why",
+        text = "Why keep the clinic running?",
+        npc = "I do not keep this place running because I am nice. I keep it running because infection, blood loss, and fever do not care about your charming personality.",
+        priority = 40,
+    },
+    {
+        id = "amelie_about_before",
+        text = "What did you do before this?",
+        npc = "Before the outbreak, I fixed people with scalpels, sutures, and expensive machines. Now I use boiled water, dirty tables, and language strong enough to disinfect wounds.",
+        priority = 50,
+    },
+    {
+        id = "amelie_about_cure",
+        text = "Do you know anything about a cure?",
+        npc = "No, I do not have a miracle cure. If I did, I would not be standing here explaining basic hygiene to armed cave people.",
+        priority = 60,
+    },
+    {
+        id = "amelie_about_losses",
+        text = "Have you lost many patients?",
+        npc = "I have lost patients. Before and after. The difference is that before, people at least had the decency to stay dead.",
+        priority = 70,
+    },
+    {
+        id = "amelie_about_goal",
+        text = "What are you trying to do here?",
+        npc = "I am trying to keep this little corner of the world breathing for one more day. Modest goal. Still apparently too advanced for most people.",
+        priority = 80,
+    },
+    {
+        id = "amelie_about_supplies",
+        text = "What does the clinic need most?",
+        npc = "Sterile supplies first. Alcohol wipes, sutures, painkillers, clean bandages. Food keeps people walking, but infection decides who gets to keep walking.",
+        priority = 90,
+    },
+    {
+        id = "amelie_about_people",
+        text = "How are your people holding up?",
+        npc = "Badly, professionally, and with too much caffeine. That is not a joke, just the current triage note.",
+        priority = 100,
+    },
+}
 
 TQ.registerDialogueBank("tq_independent_generic", {
     greeting = {
@@ -193,10 +307,53 @@ end
 TQ.registerDialogueTopic({
     id = "failure_notice",
     text = "About the job I missed.",
+    system = true,
     priority = 1,
     condition = hasPendingFailureNotice,
     npc = failureNoticeLine,
     onEnter = acknowledgeFailureNotice,
+})
+
+TQ.registerDialogueTopic({
+    id = "amelie_about",
+    contactId = "dr_amelie_crowe",
+    text = "Tell me about yourself.",
+    lineKey = "about",
+    priority = 10,
+})
+
+for _, topic in ipairs(AMELIE_ABOUT_TOPICS) do
+    TQ.registerDialogueTopic({
+        id = topic.id,
+        contactId = "dr_amelie_crowe",
+        parent = "amelie_about",
+        text = topic.text,
+        npc = topic.npc,
+        priority = topic.priority,
+    })
+end
+
+TQ.registerDialogueTopic({
+    id = "amelie_rumors",
+    contactId = "dr_amelie_crowe",
+    text = "Is there anything happening lately?",
+    npc = {
+        "I have three reports of smoke east of the highway and no clean way to verify them.",
+        "Someone is moving medical stock without knowing how to store it. That bothers me more than the theft.",
+        "The dead are bunching near the clinic road again. If you cross it, do not stop to count them.",
+    },
+    priority = 20,
+    children = {
+        {
+            id = "amelie_rumors_more",
+            contactId = "dr_amelie_crowe",
+            text = "Anything else?",
+            npc = {
+                "A patient swore they heard an engine after midnight. Could be rescue. Could be another idiot with fuel.",
+                "One of our runners saw fresh blood on a clinic door and no body. I dislike unfinished stories.",
+            },
+        },
+    },
 })
 
 TQ.registerDialogueTopic({
@@ -271,15 +428,6 @@ TQ.registerDialogueTopic({
             },
         },
     },
-})
-
-TQ.registerDialogueTopic({
-    id = "amelie_before",
-    contactId = "dr_amelie_crowe",
-    parent = "about",
-    text = "What did you do before this?",
-    npc = "Hospital doctor. These days I mostly count bandages, argue with radios, and decide who can be moved.",
-    priority = 30,
 })
 
 TQ.registerDialogueTopic({
@@ -413,14 +561,8 @@ TQ.registerContact({
     rewardTables = {
         easy = "tq_medics_doctor_easy",
     },
-    dialogueBank = "tq_medics_generic",
-    dialogue = {
-        greeting = "This is Crowe. If you are healthy enough to walk, you are healthy enough to help.",
-        about = {
-            "The clinic is small, loud, and still alive. That is enough for now.",
-            "Amelie Crowe. Doctor before, coordinator now. I miss when those were different jobs.",
-        },
-    },
+    dialogueBank = "tq_amelie_crowe",
+    dialogueExclusive = true,
 })
 
 TQ.registerContact({
@@ -517,7 +659,7 @@ TQ.registerContact({
 TQ.registerQuestTemplate({
     id = "medics_clean_bandages",
     title = "Clean Bandages",
-    description = "Dr. Cross is running through clean dressings faster than the clinic can wash them. Bring bandages to the field clinic drop.",
+    description = "Dr. Crowe is running through clean dressings faster than the clinic can wash them. Bring bandages to the field clinic drop.",
     difficulty = "easy",
     contact = "dr_amelie_crowe",
     factionId = "medics",

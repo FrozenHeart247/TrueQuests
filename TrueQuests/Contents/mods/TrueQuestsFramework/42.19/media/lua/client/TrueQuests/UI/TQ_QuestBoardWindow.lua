@@ -350,6 +350,30 @@ local function offerRefreshText(player)
     return "refresh in " .. tostring(math.ceil(remaining)) .. "h"
 end
 
+local function dialogueOptionKind(option)
+    option = type(option) == "table" and option or {}
+    if option.action == "show_jobs" then return "info" end
+    if option.action == "close" then return "muted" end
+    if option.action == "back_dialogue" then return "muted" end
+    if tostring(option.text or "") == "Back." then return "muted" end
+    return "default"
+end
+
+local function dialogueOptionsSignature(options)
+    if type(options) ~= "table" then
+        return ""
+    end
+
+    local parts = {}
+    for index, option in ipairs(options) do
+        parts[index] = tostring(option.text or "")
+            .. "|" .. tostring(option.action or "")
+            .. "|" .. tostring(option.next or "")
+            .. "|" .. tostring(option.topicId or "")
+    end
+    return table.concat(parts, "\n")
+end
+
 function TQ_QuestBoardWindow:isRadioBoard()
     return self.device ~= nil
 end
@@ -369,6 +393,16 @@ function TQ_QuestBoardWindow:createChildren()
     self.questList.doDrawItem = TQ_QuestBoardWindow.drawJobItem
     self.questList.drawBorder = false
     self:addChild(self.questList)
+
+    self.optionList = ISScrollingListBox:new(self.optionsListX, self.optionsListY, self.optionsListW, self.optionsListH)
+    self.optionList:initialise()
+    self.optionList:instantiate()
+    self.optionList.itemheight = 34
+    self.optionList.doDrawItem = TQ_QuestBoardWindow.drawDialogueOptionItem
+    self.optionList.drawBorder = false
+    self.optionList.parentWindow = self
+    self.optionList:setOnMouseDownFunction(self, TQ_QuestBoardWindow.onDialogueOptionSelected)
+    self:addChild(self.optionList)
 
     self.backButton = makeButton(self, 16, self.height - 40, 88, 26, "Back", TQ_QuestBoardWindow.onBack, "muted")
     self.refreshButton = makeButton(self, 112, self.height - 40, 92, 26, "Refresh", TQ_QuestBoardWindow.refreshData, "default")
@@ -429,12 +463,17 @@ function TQ_QuestBoardWindow:applyLayout()
 
     self.optionsX = self.dialogueX + 12
     self.optionsY = self.dialogueY + 132
+    self.optionsListX = self.optionsX
+    self.optionsListY = self.optionsY
+    self.optionsListW = self.dialogueW - 24
+    self.optionsListH = self.jobsRevealed and 38 or math.max(82, self.dialogueH - 150)
     self.jobsX = self.dialogueX + 12
-    self.jobsY = self.optionsY + 40
+    self.jobsY = self.optionsListY + self.optionsListH + 28
     self.jobsW = self.dialogueW - 24
-    self.jobsH = self.dialogueH - 184
+    self.jobsH = math.max(90, self.dialogueY + self.dialogueH - self.jobsY - 16)
 
     setChildBounds(self.questList, self.jobsX, self.jobsY, self.jobsW, self.jobsH)
+    setChildBounds(self.optionList, self.optionsListX, self.optionsListY, self.optionsListW, self.optionsListH)
     setChildBounds(self.backButton, 16, self.height - 40, 88, 26)
     setChildBounds(self.refreshButton, 112, self.height - 40, 92, 26)
     setChildBounds(self.acceptButton, 214, self.height - 40, 92, 26)
@@ -726,25 +765,74 @@ end
 function TQ_QuestBoardWindow:updateDialogueOptions()
     local inDialogue = self.mode == "dialogue"
     local options = inDialogue and self.dialogueOptions or {}
-    self:ensureOptionButtons(type(options) == "table" and #options or 0)
+    local optionRows = type(options) == "table" and options or {}
+    local optionCount = #optionRows
+    local signature = inDialogue and dialogueOptionsSignature(optionRows) or ""
 
-    for index, button in ipairs(self.optionButtons or {}) do
-        setChildBounds(button, self.optionsX, self.optionsY + (index - 1) * 36, math.min(420, self.dialogueW - 24), 28)
-    end
-
-    for index, button in ipairs(self.optionButtons or {}) do
-        local option = options and options[index] or nil
-        local visible = option ~= nil
-        setVisible(button, visible)
-        if visible then
-            setButtonTitle(button, tostring(option.text or "..."))
-            local kind = option.action == "show_jobs" and "info"
-                or option.action == "close" and "muted"
-                or option.action == "back_dialogue" and "muted"
-                or "default"
-            TQ_UITheme.styleButton(button, kind)
+    setVisible(self.optionList, inDialogue and optionCount > 0)
+    if self.optionList and self.optionListSignature ~= signature then
+        self.optionList:clear()
+        if self.optionList.setScrollHeight then
+            self.optionList:setScrollHeight(0)
         end
+        for index, option in ipairs(optionRows) do
+            self.optionList:addItem(tostring(option.text or "..."), {
+                index = index,
+                option = option,
+            })
+        end
+        self.optionList.selected = optionCount > 0 and 1 or 0
+        self.optionListSignature = signature
     end
+
+    for index, button in ipairs(self.optionButtons or {}) do
+        setVisible(button, false)
+    end
+end
+
+function TQ_QuestBoardWindow.drawDialogueOptionItem(list, y, item, alt)
+    local entry = item and item.item or {}
+    local option = entry.option or {}
+    local selected = list.selected == item.index
+    local hovered = list.mouseoverselected == item.index and list:isMouseOver() and not list:isMouseOverScrollBar()
+    local kind = dialogueOptionKind(option)
+    local rowX = 3
+    local rowY = y + 3
+    local rowW = list.width - 10
+    if list.vscroll and list.getScrollHeight and list:getScrollHeight() > list.height then
+        rowW = rowW - 14
+    end
+    local rowH = list.itemheight - 6
+    local fill = selected and "selected" or (hovered and "hover" or "button")
+    local border = "border"
+    local accent = "blue"
+    local textColor = "text"
+
+    if kind == "info" then
+        accent = "blue"
+    elseif kind == "muted" then
+        fill = selected and "hover" or (hovered and "button" or "panelAlt")
+        border = "borderSoft"
+        accent = "borderSoft"
+        textColor = "dim"
+    end
+
+    TQ_UITheme.drawPanel(list, rowX, rowY, rowW, rowH, fill, border)
+    TQ_UITheme.drawAccent(list, rowX, rowY, 4, rowH, accent)
+
+    local c = TQ_UITheme.Colors[textColor] or TQ_UITheme.Colors.text
+    local label = TQ_UITheme.truncate(tostring(item.text or option.text or "..."), rowW - 24, UIFont.Small)
+    list:drawText(label, rowX + 14, rowY + 8, c.r, c.g, c.b, c.a, UIFont.Small)
+
+    return y + list.itemheight
+end
+
+function TQ_QuestBoardWindow:onDialogueOptionSelected(entry)
+    if not entry or not entry.index then
+        return
+    end
+
+    self:onDialogueOption(entry.index)
 end
 
 function TQ_QuestBoardWindow:onDialogueOption(index)
@@ -1075,6 +1163,9 @@ function TQ_QuestBoardWindow:drawDialogue()
     TQ_UITheme.drawWrapped(self, self.currentLine or "", self.dialogueX + 28, self.dialogueY + 30, self.dialogueW - 56, 4, "text", UIFont.Small)
 
     self:drawText(self.jobsRevealed and "Conversation" or "Choose a response", self.optionsX, self.optionsY - 20, 0.78, 0.82, 0.80, 1, UIFont.Small)
+    if self.optionList and self.optionList.visible then
+        TQ_UITheme.drawPanel(self, self.optionsListX, self.optionsListY, self.optionsListW, self.optionsListH, "listBg", "borderSoft")
+    end
 
     if self.jobsRevealed then
         local refreshText = offerRefreshText(self.player)

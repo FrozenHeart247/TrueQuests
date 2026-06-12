@@ -58,6 +58,25 @@ local function containsString(list, value)
     return false
 end
 
+local function usesExclusiveDialogue(contact)
+    if type(contact) ~= "table" then
+        return false
+    end
+
+    return contact.dialogueExclusive == true
+        or contact.exclusiveDialogue == true
+        or tostring(contact.dialogueMode or "") == "exclusive"
+        or tostring(contact.dialogueTopics or "") == "exclusive"
+end
+
+local function topicHasContactScope(topic)
+    return type(topic) == "table" and (topic.contactId ~= nil or type(topic.contactIds) == "table")
+end
+
+local function topicIsSystem(topic)
+    return type(topic) == "table" and (topic.system == true or topic.always == true)
+end
+
 function TQ.registerDialogueBank(id, lines)
     if not id or tostring(id) == "" or type(lines) ~= "table" then
         TQ.warn("Cannot register dialogue bank without id and lines")
@@ -144,7 +163,7 @@ function TQ.Dialogue.getContactLine(contactOrId, key, fallback)
     local contact = type(contactOrId) == "table" and contactOrId or TQ.getContact(contactOrId)
     local line = getSourceLine(contact, key) or getBankedLine(contact, key)
 
-    if not line and TQ.Factions and contact then
+    if not line and not usesExclusiveDialogue(contact) and TQ.Factions and contact then
         local faction = TQ.Factions.getFactionForContact(contact)
         line = getSourceLine(faction, key) or getBankedLine(faction, key)
     end
@@ -193,6 +212,20 @@ end
 
 local function fallbackTreeNode(contact, nodeId)
     nodeId = tostring(nodeId or "start")
+
+    if usesExclusiveDialogue(contact) then
+        if nodeId ~= "start" then
+            return nil
+        end
+
+        return {
+            npc = TQ.Dialogue.getContactLine(contact, "greeting", "The signal clears."),
+            options = {
+                { text = "Anything you need done?", action = "show_jobs" },
+                { text = "Goodbye.", action = "close" },
+            },
+        }
+    end
 
     if nodeId == "start" then
         return {
@@ -288,6 +321,11 @@ local function topicApplies(topic, contact, context)
     if type(topic.contactIds) == "table" and not containsString(topic.contactIds, contactId) then
         return false
     end
+
+    if usesExclusiveDialogue(contact) and not topicIsSystem(topic) and not topicHasContactScope(topic) then
+        return false
+    end
+
     if topic.factionId and tostring(topic.factionId) ~= factionId then
         return false
     end
@@ -457,7 +495,7 @@ function TQ.Dialogue.getTreeNode(contactOrId, nodeId, context)
     if not node then
         node = findTreeNodeInSource(contact, nodeId)
     end
-    if not node and TQ.Factions and contact then
+    if not node and TQ.Factions and contact and not usesExclusiveDialogue(contact) then
         node = findTreeNodeInSource(TQ.Factions.getFactionForContact(contact), nodeId)
     end
     if not node then
