@@ -104,6 +104,9 @@ local function npcSearchSource(contactId, fallback, options)
     end
 end
 
+-- Dialogue layout:
+-- dialogueBank = random reusable lines for greeting/about/work/accept/complete.
+-- registerDialogueTopic = actual RPG-style conversation buttons and branches.
 TQ.registerDialogueBank("tq_medics_generic", {
     greeting = {
         "Field clinic listening. Keep your hands clean and your voice low.",
@@ -130,26 +133,37 @@ TQ.registerDialogueBank("tq_medics_generic", {
 
 TQ.registerDialogueBank("tq_independent_generic", {
     greeting = {
-        "Anyone alive on this frequency?",
-        "Keep it short. I am not staying on the air long.",
-        "You hear this? Good. I have a job if you are moving.",
+        "Anyone alive on this frequency? Sometimes it seems like I'm talking to ghosts...",
+        "I can hear ya. Keep it short. I am not staying on the air long.",
+        "You hear this? Good. I might have a job if you are interested.",
+        "Whoa! There's actually someone alive. Could you help me?",
+        "I heard people make umbushes and killing each other just for fun. I hope you're not one of them",
+        "Keep it short. I don't have time talking all day.",
     },
     about = {
         "No faction, no banner. Just people trying to get through one more day.",
+        "We are simple people just trying to survive.",
+        "If I can make it through another day I call it a win. ",
         "I trade favors, not promises.",
+        "Better alone and in motion. No connections no responsibilities. If something goes wrong I know who's fault it is.",
     },
     work = {
         "Could be salvage, could be delivery. Depends what the dead are blocking today.",
         "If you can haul it, I can pay.",
+        "I badly need those from the that list. Interested to share?",
+        "Might be risky. And I'm not asking you to die for me. But would be great if you could help",
+        "A simple job that can turn into not that simple one.. Still interested?",
     },
     accept = {
-        "Good. I will remember this.",
+        "Good. I will remember this. Don't take too long and be careful",
         "Copy that. Watch the roads.",
-        "Fair deal. Do not bring a tail.",
+        "Alright. Hope you words mean something.And do not bring a tail.",
     },
     complete = {
-        "You came through. Pick something.",
+        "You did it! Thanks so much!. I can share with you one of my findings. Pick something.",
         "That is better than I expected. Take your pay.",
+        "You actually made it. I guess humanity is not dead yet. Here's your reward",
+        "Thanks. Perhaps I can help you another time.",
     },
 })
 
@@ -195,14 +209,14 @@ TQ.registerDialogueTopic({
             id = "medics_needs",
             factionId = "medics",
             text = "What does the clinic need most?",
-            npc = "Clean cloth, disinfectant, painkillers. In that order. Everything else is comfort.",
+            npc = "Clean cloth, bandages, disinfectant, painkillers and pretty much all medicine you can find. Everything else is comfort.",
             priority = 10,
         },
         {
             id = "medics_people",
             factionId = "medics",
             text = "How are your people holding up?",
-            npc = "Tired. Too tired to waste supplies, not tired enough to stop answering calls.",
+            npc = "We holding up. Mostly. Trying to help others more than ourselves. Always low on supply",
             priority = 20,
         },
         {
@@ -313,98 +327,6 @@ TQ.registerDialogueTopic({
     priority = 30,
 })
 
-TQ.registerDialogueTreeBank("tq_medics_tree", {
-    start = {
-        npc = {
-            "Clinic band is open. Tell me what you need.",
-            "You reached the field clinic. Keep the channel clear.",
-        },
-        options = {
-            { text = "Tell me about yourself.", next = "about" },
-            { text = "Is there anything happening lately?", next = "rumors" },
-            { text = "Anything you need done?", action = "show_jobs" },
-            { text = "Goodbye.", action = "close" },
-        },
-    },
-    about = {
-        npc = {
-            "We were medical staff, volunteers, and whoever could still hold pressure on a wound.",
-            "The clinic is not much. A few cots, a few shelves, and a radio that still reaches people.",
-        },
-        options = {
-            { text = "What does the clinic need most?", next = "needs" },
-            { text = "How are your people holding up?", next = "people" },
-            { text = "Back.", next = "start" },
-        },
-    },
-    needs = {
-        npc = "Clean cloth, disinfectant, painkillers. In that order. Everything else is comfort.",
-        options = {
-            { text = "Back.", next = "about" },
-        },
-    },
-    people = {
-        npc = "Tired. Too tired to waste supplies, not tired enough to stop answering calls.",
-        options = {
-            { text = "Back.", next = "about" },
-        },
-    },
-    rumors = {
-        npc = {
-            "Someone came in talking about smoke north of the highway. Could be survivors, could be trouble.",
-            "We heard gunfire after midnight. Short bursts. Organized, or scared. Hard to tell.",
-            "A runner said the clinic road was clear this morning. I would not trust that by dusk.",
-        },
-        options = {
-            { text = "Anything else?", next = "rumors" },
-            { text = "Back.", next = "start" },
-        },
-    },
-})
-
-TQ.registerDialogueTreeBank("tq_independent_tree", {
-    start = {
-        npc = {
-            "You got me. Say what you need to say.",
-            "Line is bad, but I hear you.",
-            "Make it quick. I do not like talking from one place too long.",
-        },
-        options = {
-            { text = "Tell me about yourself.", next = "about" },
-            { text = "Is there anything happening lately?", next = "rumors" },
-            { text = "Anything you need done?", action = "show_jobs" },
-            { text = "Goodbye.", action = "close" },
-        },
-    },
-    about = {
-        npc = {
-            "No badge, no crew, no speeches. I stay alive and pay back favors.",
-            "I used to know what my days were for. Now I count exits and canned food.",
-        },
-        options = {
-            { text = "You trust anyone out there?", next = "trust" },
-            { text = "Back.", next = "start" },
-        },
-    },
-    trust = {
-        npc = "Trust? No. But I keep a list of people who did not make things worse.",
-        options = {
-            { text = "Back.", next = "about" },
-        },
-    },
-    rumors = {
-        npc = {
-            "There is a dead crowd moving west. Slow, but too many to ignore.",
-            "Someone is stripping cars near the old road. If you hear engines, keep low.",
-            "I heard a generator last night. Then screaming. Then nothing.",
-        },
-        options = {
-            { text = "Anything else?", next = "rumors" },
-            { text = "Back.", next = "start" },
-        },
-    },
-})
-
 TQ.registerFaction({
     id = "medics",
     name = "Field Medics",
@@ -422,7 +344,6 @@ TQ.registerFaction({
         hard = 20,
     },
     dialogueBank = "tq_medics_generic",
-    dialogueTreeBank = "tq_medics_tree",
 })
 
 TQ.registerFaction({
@@ -442,7 +363,6 @@ TQ.registerFaction({
         hard = 10,
     },
     dialogueBank = "tq_independent_generic",
-    dialogueTreeBank = "tq_independent_tree",
 })
 
 TQ.registerRewardTable("tq_medics_easy", {
@@ -494,19 +414,11 @@ TQ.registerContact({
         easy = "tq_medics_doctor_easy",
     },
     dialogueBank = "tq_medics_generic",
-    dialogueTreeBank = "tq_medics_tree",
     dialogue = {
         greeting = "This is Crowe. If you are healthy enough to walk, you are healthy enough to help.",
-        about = "The clinic is small, loud, and still alive. That is enough for now.",
-    },
-    dialogueTree = {
         about = {
-            npc = "Amelie Crowe. Doctor before, coordinator now. I miss when those were different jobs.",
-            options = {
-                { text = "What does the clinic need most?", next = "needs" },
-                { text = "How are your people holding up?", next = "people" },
-                { text = "Back.", next = "start" },
-            },
+            "The clinic is small, loud, and still alive. That is enough for now.",
+            "Amelie Crowe. Doctor before, coordinator now. I miss when those were different jobs.",
         },
     },
 })
@@ -525,7 +437,6 @@ TQ.registerContact({
         easy = "tq_medics_nurse_easy",
     },
     dialogueBank = "tq_medics_generic",
-    dialogueTreeBank = "tq_medics_tree",
     dialogue = {
         greeting = "Mara here. If you found clean cloth, I am interested.",
         work = "Bandages, wipes, anything that keeps a wound from turning ugly.",
@@ -546,7 +457,6 @@ TQ.registerContact({
         easy = "tq_medics_paramedic_easy",
     },
     dialogueBank = "tq_medics_generic",
-    dialogueTreeBank = "tq_medics_tree",
     dialogue = {
         greeting = "Hale on the ambulance set. No ambulance left, but the radio still works.",
         about = "I used to drive people out of trouble. Now I mostly ask strangers for supplies.",
@@ -568,7 +478,6 @@ TQ.registerContact({
         easy = "tq_independent_easy",
     },
     dialogueBank = "tq_independent_generic",
-    dialogueTreeBank = "tq_independent_tree",
 })
 
 TQ.registerContact({
@@ -586,7 +495,6 @@ TQ.registerContact({
         easy = "tq_independent_easy",
     },
     dialogueBank = "tq_independent_generic",
-    dialogueTreeBank = "tq_independent_tree",
 })
 
 TQ.registerContact({
@@ -604,7 +512,6 @@ TQ.registerContact({
         easy = "tq_independent_easy",
     },
     dialogueBank = "tq_independent_generic",
-    dialogueTreeBank = "tq_independent_tree",
 })
 
 TQ.registerQuestTemplate({

@@ -360,6 +360,25 @@ local function topicOption(topic)
     return option
 end
 
+local function optionKey(option)
+    if type(option) ~= "table" then
+        return ""
+    end
+
+    return string.lower(tostring(option.text or ""))
+end
+
+local function addUniqueOption(options, seen, option)
+    local key = optionKey(option)
+    if key == "" or seen[key] then
+        return false
+    end
+
+    seen[key] = true
+    table.insert(options, option)
+    return true
+end
+
 local function topicLine(topic, contact, context)
     local line = pickLine(topic.npc or topic.response or topic.line or topic.lines, topicContext(topic, contact, context))
     if line then
@@ -386,11 +405,12 @@ local function dynamicTopicNode(contact, nodeId, context)
         end
 
         local options = {}
+        local seenOptions = {}
         for _, topic in ipairs(topics) do
-            table.insert(options, topicOption(topic))
+            addUniqueOption(options, seenOptions, topicOption(topic))
         end
-        table.insert(options, { text = "Anything you need done?", action = "show_jobs" })
-        table.insert(options, { text = "Goodbye.", action = "close" })
+        addUniqueOption(options, seenOptions, { text = "Anything you need done?", action = "show_jobs" })
+        addUniqueOption(options, seenOptions, { text = "Goodbye.", action = "close" })
 
         return {
             npc = TQ.Dialogue.getContactLine(contact, "greeting", "The signal clears."),
@@ -404,18 +424,19 @@ local function dynamicTopicNode(contact, nodeId, context)
     end
 
     local options = {}
+    local seenOptions = {}
     for _, childTopic in ipairs(getTopicsForParent(contact, topic.id, context)) do
-        table.insert(options, topicOption(childTopic))
+        addUniqueOption(options, seenOptions, topicOption(childTopic))
     end
     if topic.includeJobs == true then
-        table.insert(options, { text = "Anything you need done?", action = "show_jobs" })
+        addUniqueOption(options, seenOptions, { text = "Anything you need done?", action = "show_jobs" })
     end
 
     local backTarget = tostring(topic.back or topic.parent or "start")
     if backTarget == "" or backTarget == topic.id then
         backTarget = "start"
     end
-    table.insert(options, { text = tostring(topic.backText or "Back."), next = backTarget })
+    addUniqueOption(options, seenOptions, { text = tostring(topic.backText or "Back."), next = backTarget })
 
     local npcLine = topicLine(topic, contact, context)
     if type(topic.onEnter) == "function" then
