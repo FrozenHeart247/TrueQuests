@@ -3,6 +3,7 @@ require "ISUI/ISButton"
 require "ISUI/ISScrollingListBox"
 require "TrueQuests/TQ_API"
 require "TrueQuests/UI/TQ_UITheme"
+require "TrueQuests/UI/TQ_QuestMarker"
 
 TQ_QuestJournalWindow = ISPanel:derive("TQ_QuestJournalWindow")
 TQ_QuestJournalWindow.instance = nil
@@ -47,6 +48,17 @@ local function makeButton(parent, x, y, width, height, title, callback, kind)
     TQ_UITheme.styleButton(button, kind)
     parent:addChild(button)
     return button
+end
+
+local function setButtonTitle(button, title)
+    if not button then
+        return
+    end
+    if button.setTitle then
+        button:setTitle(tostring(title or ""))
+    else
+        button.title = tostring(title or "")
+    end
 end
 
 local function statusLabel(status)
@@ -137,6 +149,7 @@ function TQ_QuestJournalWindow:createChildren()
     self:addChild(self.questList)
 
     self.refreshButton = makeButton(self, 16, self.height - 38, 92, 24, "Refresh", TQ_QuestJournalWindow.refreshData, "default")
+    self.markerButton = makeButton(self, 116, self.height - 38, 104, 24, "Marker On", TQ_QuestJournalWindow.onToggleMarker, "info")
     self.closeButton = makeButton(self, self.width - 104, self.height - 38, 88, 24, "Close", TQ_QuestJournalWindow.close, "muted")
     self.topCloseButton = makeButton(self, self.width - 27, 3, 21, 18, "X", TQ_QuestJournalWindow.close, "danger")
 
@@ -177,6 +190,7 @@ function TQ_QuestJournalWindow:applyLayout()
 
     setChildBounds(self.questList, self.listX, self.listY, self.listW, self.listH)
     setChildBounds(self.refreshButton, 16, self.height - 38, 92, 24)
+    setChildBounds(self.markerButton, 116, self.height - 38, 104, 24)
     setChildBounds(self.closeButton, self.width - 104, self.height - 38, 88, 24)
     setChildBounds(self.topCloseButton, self.width - 27, 3, 21, 18)
 end
@@ -230,6 +244,31 @@ function TQ_QuestJournalWindow:refreshData()
     setVisible(self.questList, self.questList.items and #self.questList.items > 0)
 
     self:applyLayout()
+    self:updateMarkerButton()
+end
+
+function TQ_QuestJournalWindow:updateMarkerButton()
+    local quest = self:getSelectedQuest()
+    local marker = TrueQuests.QuestItems and TrueQuests.QuestItems.getQuestMarker and TrueQuests.QuestItems.getQuestMarker(quest) or nil
+    local enabled = marker ~= nil
+
+    if self.markerButton then
+        self.markerButton:setEnable(enabled)
+        setButtonTitle(self.markerButton, TQ_QuestMarker and TQ_QuestMarker.isTracking and TQ_QuestMarker.isTracking(quest) and "Marker Off" or "Marker On")
+        TQ_UITheme.styleButton(self.markerButton, enabled and (TQ_QuestMarker and TQ_QuestMarker.isTracking and TQ_QuestMarker.isTracking(quest) and "warning" or "info") or "muted")
+    end
+end
+
+function TQ_QuestJournalWindow:onToggleMarker()
+    local quest = self:getSelectedQuest()
+    if not quest or not TrueQuests.QuestItems or not TrueQuests.QuestItems.getQuestMarker or not TrueQuests.QuestItems.getQuestMarker(quest) then
+        return
+    end
+
+    if TQ_QuestMarker and TQ_QuestMarker.Toggle then
+        TQ_QuestMarker.Toggle(self.player, quest)
+    end
+    self:updateMarkerButton()
 end
 
 function TQ_QuestJournalWindow:drawQuestDetails(quest)
@@ -322,6 +361,7 @@ end
 
 function TQ_QuestJournalWindow:prerender()
     self:applyLayout()
+    self:updateMarkerButton()
     self:drawChrome()
 
     TQ_UITheme.drawPanel(self, self.bodyX, self.bodyY, self.bodyW, 44, "panelBg", "border")

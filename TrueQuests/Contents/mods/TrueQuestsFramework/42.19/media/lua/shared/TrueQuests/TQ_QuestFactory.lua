@@ -81,10 +81,15 @@ function TQ.QuestFactory.build(templateId, questId, player, options)
         difficulty = difficulty,
         contact = contact,
         faction = faction,
+        contactId = contactId,
+        factionId = factionId,
+        questId = questId,
+        templateId = template.id,
     }
 
     local objectives = {}
-    for _, objectiveTemplate in ipairs(template.objectives or {}) do
+    for index, objectiveTemplate in ipairs(template.objectives or {}) do
+        context.objectiveIndex = index
         local objective = TQ.Objectives.build(objectiveTemplate, context)
         if objective then
             table.insert(objectives, objective)

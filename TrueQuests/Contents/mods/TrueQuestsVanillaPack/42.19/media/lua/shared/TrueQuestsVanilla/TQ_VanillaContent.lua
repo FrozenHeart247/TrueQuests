@@ -60,6 +60,50 @@ local function npcTurnIn(contactId, fallback)
     end
 end
 
+local function getContactNPCSpawn(contactId)
+    local contact = TQ.getContact(contactId)
+    local npcId = contact and contact.npcId or CONTACT_NPC_IDS[tostring(contactId or "")]
+    local TN = TrueNPC
+    local npc = TN and TN.getNPC and TN.getNPC(npcId) or nil
+    local spawn = nil
+    if npc and TN and TN.Registry and TN.Registry.selectNPCSpawn then
+        spawn = TN.Registry.selectNPCSpawn(npc)
+        if TN.Save and TN.Save.transmit then
+            TN.Save.transmit()
+        end
+    end
+    return spawn or (npc and TN and TN.getNPCSpawn and TN.getNPCSpawn(npc) or nil), contact
+end
+
+local function npcSearchSource(contactId, fallback, options)
+    options = type(options) == "table" and options or {}
+    return function(ctx)
+        local spawn, contact = getContactNPCSpawn(contactId)
+        local base = type(spawn) == "table" and spawn or fallback
+        local x = tonumber(base and base.x) or tonumber(fallback and fallback.x) or 0
+        local y = tonumber(base and base.y) or tonumber(fallback and fallback.y) or 0
+        local z = tonumber(base and base.z) or tonumber(fallback and fallback.z) or 0
+        x = x + (tonumber(options.dx) or 0)
+        y = y + (tonumber(options.dy) or 0)
+        z = z + (tonumber(options.dz) or 0)
+
+        local owner = tostring(contact and contact.name or "Survivor")
+        return {
+            mode = options.mode or "world",
+            label = options.label or (owner .. "'s search area (" .. tostring(math.floor(x)) .. ", " .. tostring(math.floor(y)) .. ")"),
+            markerLabel = options.markerLabel,
+            x = x,
+            y = y,
+            z = z,
+            radius = options.radius or 14,
+            activationRange = options.activationRange or 180,
+            spawnZombie = options.spawnZombie,
+            outfit = options.outfit,
+            femaleChance = options.femaleChance,
+        }
+    end
+end
+
 TQ.registerDialogueBank("tq_medics_generic", {
     greeting = {
         "Field clinic listening. Keep your hands clean and your voice low.",
@@ -676,6 +720,82 @@ TQ.registerQuestTemplate({
     tags = { "survival", "delivery" },
     objectives = {
         { type = "item", item = "Base.WaterBottle", count = 1, label = "Sealed water bottle" },
+    },
+    rewards = {
+        table = "$contact",
+        choices = 3,
+    },
+})
+
+TQ.registerQuestTemplate({
+    id = "marlow_lost_acoustic_guitar",
+    title = "Lost Acoustic",
+    description = "Marlow left a marked acoustic guitar in a small stash before moving camp. Recover Marlow's guitar and bring it back to his current spot.",
+    difficulty = "easy",
+    contact = "marlow_relay",
+    factionId = "independent",
+    unique = true,
+    timeLimitHours = 48,
+    tags = { "salvage", "memento", "quest-item" },
+    objectives = {
+        {
+            id = "guitar",
+            type = "item",
+            item = "Base.GuitarAcoustic",
+            count = 1,
+            label = "Marlow's acoustic guitar",
+            questItem = true,
+            questItemName = "Marlow's Acoustic Guitar",
+            questItemTooltip = "A scratched acoustic guitar marked with Marlow's initials.",
+            sourceHint = "Search the marked stash near Marlow's current route.",
+            source = npcSearchSource("marlow_relay", MULDRAUGH_RELAY, {
+                mode = "world",
+                dx = 18,
+                dy = 10,
+                radius = 10,
+                label = "Marlow's old music stash",
+                markerLabel = "Marlow's guitar stash",
+            }),
+        },
+    },
+    rewards = {
+        table = "$contact",
+        choices = 3,
+    },
+})
+
+TQ.registerQuestTemplate({
+    id = "tess_happy_face_pillow",
+    title = "Happy Face",
+    description = "Tess is looking for a specific happy face pillow from an old safehouse. One of the dead near the place carried it off.",
+    difficulty = "easy",
+    contact = "tess_roofline",
+    factionId = "independent",
+    unique = true,
+    timeLimitHours = 48,
+    tags = { "salvage", "memento", "quest-item" },
+    objectives = {
+        {
+            id = "pillow",
+            type = "item",
+            item = "Base.Pillow_Happyface",
+            count = 1,
+            label = "Tess's happy face pillow",
+            questItem = true,
+            questItemName = "Tess's Happy Face Pillow",
+            questItemTooltip = "A faded happy face pillow Tess described over the radio.",
+            sourceHint = "Search the carrier zombie near Tess's old safehouse route.",
+            source = npcSearchSource("tess_roofline", MULDRAUGH_RELAY, {
+                mode = "zombie",
+                dx = -16,
+                dy = 14,
+                radius = 16,
+                activationRange = 190,
+                spawnZombie = true,
+                label = "Tess's old safehouse route",
+                markerLabel = "Carrier zombie search area",
+            }),
+        },
     },
     rewards = {
         table = "$contact",

@@ -240,7 +240,12 @@ local function describeObjectiveTemplate(objective)
 
     if objective.type == "item" then
         local name = objective.label or TrueQuests.getItemDisplayName(objective.item)
-        return "Bring " .. tostring(name) .. " x" .. objectiveCountText(objective.count or objective.required or 1)
+        local verb = (objective.questItem == true or objective.uniqueItem == true or objective.source or objective.spawn) and "Recover " or "Bring "
+        local text = verb .. tostring(name) .. " x" .. objectiveCountText(objective.count or objective.required or 1)
+        if objective.sourceHint then
+            text = text .. " - " .. tostring(objective.sourceHint)
+        end
+        return text
     end
 
     if objective.description then

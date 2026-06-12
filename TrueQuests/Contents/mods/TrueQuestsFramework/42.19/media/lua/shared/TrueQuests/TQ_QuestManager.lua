@@ -498,6 +498,19 @@ function TQ.QuestManager.getOffers(player, contactId, limit)
     return offers
 end
 
+function TQ.QuestManager.resetOfferCache(player)
+    local data = TQ.Save.getData(player)
+    local previousGeneration = tonumber(data.offers and data.offers.generation) or 0
+    data.offers = {
+        refreshAt = 0,
+        generatedAt = 0,
+        generation = previousGeneration + 1,
+        byContact = {},
+    }
+    TQ.Save.touch(player)
+    return data.offers
+end
+
 function TQ.QuestManager.acceptQuest(player, templateId, options)
     local data = TQ.Save.getData(player)
     local offerState, offerStateChanged = ensureOfferWindow(data)
@@ -532,6 +545,9 @@ function TQ.QuestManager.acceptQuest(player, templateId, options)
 
     TQ.QuestManager.updateQuestProgress(quest, player)
     table.insert(data.active, quest)
+    if TQ.QuestItems and TQ.QuestItems.ensureForQuest then
+        TQ.QuestItems.ensureForQuest(player, quest)
+    end
     table.insert(data.history, {
         event = "accepted",
         questId = quest.id,
